@@ -6,7 +6,7 @@ Guttered shows your branch's changes in the normal VS Code editor, including com
 
 The comparison starts at a **merge base**: a common ancestor of your branch and the repository's default branch, selected by Git. Changes made only on the default branch after that point stay out of your indicators.
 
-Added lines have green bars, modified lines have yellow bars, and deleted lines have red triangles on the neighboring line. The overview ruler also shows the changes. These markers leave the text background unchanged.
+Added lines have soft green bars, modified lines have soft yellow bars, and deleted lines have soft red triangles on the neighboring line. Markers use 30% opacity by default, keeping native Git indicators more prominent on both dark and light themes. Markers sit in an 8 px inset before the text, leaving breakpoint clicks, line numbers, folding controls, and native Git markers available. Unchanged lines use the same inset to keep the code aligned. The overview ruler also shows the changes; text backgrounds stay unchanged.
 
 ## Install
 
@@ -21,7 +21,7 @@ npm ci
 npm run package
 ```
 
-In VS Code, run **Extensions: Install from VSIX…** and select `guttered-0.1.0.vsix`. Open a file in a Git repository to start comparing automatically.
+In VS Code, run **Extensions: Install from VSIX…** and select `guttered-0.2.0.vsix`. Open a file in a Git repository to start comparing automatically.
 
 ## Use Guttered
 
@@ -59,8 +59,9 @@ All settings support workspace-folder overrides.
 | `guttered.baseReference` | `""` | Detect the remote default branch; optionally use an explicit reference |
 | `guttered.debounceMs` | `250` | Delay after typing, in milliseconds |
 | `guttered.maxFileSizeKB` | `1024` | Maximum size of either file, in KiB |
-| `guttered.gutter` | `true` | Show gutter icons |
+| `guttered.gutter` | `true` | Show markers and the small inset before the text |
 | `guttered.overviewRuler` | `true` | Show overview ruler markers |
+| `guttered.opacity` | `0.3` | Marker opacity, from invisible (`0`) to fully opaque (`1`) |
 | `guttered.colors.added` | `#4CAF50` | Added line color |
 | `guttered.colors.modified` | `#E6A817` | Modified line color |
 | `guttered.colors.deleted` | `#F44336` | Deletion marker color |

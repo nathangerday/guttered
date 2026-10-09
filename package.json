@@ -3,7 +3,7 @@
   "displayName": "Guttered",
   "icon": "assets/icon.png",
   "description": "Live gutter indicators for your branch's changes since its merge base, including unsaved edits.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "guttered",
   "license": "MIT",
   "repository": {
@@ -151,7 +151,7 @@
           "type": "boolean",
           "default": true,
           "scope": "resource",
-          "description": "Show gutter icons. Disable if another extension uses the same gutter space; overview markers and actions remain available."
+          "description": "Show change markers in a small inset before the text, leaving breakpoint and folding controls free. Overview markers and actions remain available when disabled."
         },
         "guttered.overviewRuler": {
           "type": "boolean",
@@ -179,6 +179,14 @@
           "pattern": "^#[0-9a-fA-F]{6}$",
           "scope": "resource",
           "description": "Color of deletion positions (hex RGB)."
+        },
+        "guttered.opacity": {
+          "type": "number",
+          "default": 0.3,
+          "minimum": 0,
+          "maximum": 1,
+          "scope": "resource",
+          "description": "Opacity of Guttered markers, including the overview ruler. 0 is invisible and 1 is fully opaque; the default keeps native Git indicators more prominent."
         }
       }
     }

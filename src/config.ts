@@ -13,6 +13,7 @@ export function configuration(uri: vscode.Uri) {
     maxBytes: Math.max(1, Math.min(10240, config.get<number>('maxFileSizeKB', 1024))) * 1024,
     gutter: config.get<boolean>('gutter', true),
     overviewRuler: config.get<boolean>('overviewRuler', true),
+    opacity: Math.max(0, Math.min(1, config.get<number>('opacity', 0.3))),
     added: color('added', '#4CAF50'),
     modified: color('modified', '#E6A817'),
     deleted: color('deleted', '#F44336'),

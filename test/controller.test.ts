@@ -22,6 +22,7 @@ const textChanged = new Event<{ document: vscode.TextDocument; contentChanges: u
 const noopEvent = () => ({ dispose() {} });
 const settings = new Map<string, unknown>();
 let decorationId = 0;
+const decorationOptions = new Map<string, vscode.DecorationRenderOptions>();
 const fakeWindow = {
   state: { focused: true },
   visibleTextEditors: [] as vscode.TextEditor[],
@@ -31,7 +32,11 @@ const fakeWindow = {
   onDidChangeWindowState: focusedChanged.subscribe,
   createStatusBarItem: () => ({ show() {}, hide() {}, dispose() {} }),
   createOutputChannel: () => ({ appendLine() {}, dispose() {} }),
-  createTextEditorDecorationType: () => ({ key: String(++decorationId), dispose() {} }),
+  createTextEditorDecorationType: (options: vscode.DecorationRenderOptions) => {
+    const key = String(++decorationId);
+    decorationOptions.set(key, options);
+    return { key, dispose() {} };
+  },
 };
 const fakeVSCode = {
   window: fakeWindow,
@@ -98,6 +103,7 @@ afterEach(() => {
   fakeWindow.visibleTextEditors = [];
   fakeWindow.state.focused = true;
   settings.clear();
+  decorationOptions.clear();
 });
 function setup(t: TestContext, document = new Document(), baseline = 'original\n') {
   const controller = new Controller();
@@ -225,7 +231,8 @@ test('both split editors receive markers and clear them when text is restored', 
   const second = editor(document);
   fakeWindow.visibleTextEditors.push(second.api);
   await controller.compare(document.api);
-  const count = (value: typeof view) => [...value.decorations.values()].reduce((sum, ranges) => sum + ranges.length, 0);
+  const count = (value: typeof view) => [...value.decorations].reduce((sum, [key, ranges]) =>
+    sum + (decorationOptions.get(key)?.overviewRulerColor ? ranges.length : 0), 0);
   assert.equal(count(view), 1);
   assert.equal(count(second), 1);
   document.text = 'original\n';
@@ -233,6 +240,37 @@ test('both split editors receive markers and clear them when text is restored', 
   await controller.compare(document.api);
   assert.equal(count(view), 0);
   assert.equal(count(second), 0);
+});
+
+test('markers reserve an equal inset on every line and leave the breakpoint gutter free', async t => {
+  const { controller, document, view } = setup(t, new Document('same\nchanged\n'), 'same\noriginal\n');
+  await controller.compare(document.api);
+  const insetLines: number[] = [];
+  const markedLines: number[] = [];
+  for (const [key, ranges] of view.decorations) {
+    const options = decorationOptions.get(key)!;
+    assert.equal(options.gutterIconPath, undefined);
+    assert.equal(options.before?.width, '3px');
+    assert.equal(options.before?.margin, '0 5px 0 0');
+    assert.equal(options.before?.height, '1lh');
+    assert.deepEqual(options.after, { contentText: '', width: '0px' });
+    insetLines.push(...ranges.map(range => range.start.line));
+    if (options.before?.backgroundColor) markedLines.push(...ranges.map(range => range.start.line));
+  }
+  assert.deepEqual(insetLines.sort(), [0, 1, 2]);
+  assert.deepEqual(markedLines, [1]);
+  settings.set('guttered.gutter', false);
+  document.version++;
+  await controller.compare(document.api);
+  for (const [key, ranges] of view.decorations) {
+    if (ranges.length) {
+      assert.equal(decorationOptions.get(key)?.before, undefined);
+      assert.equal(decorationOptions.get(key)?.after, undefined);
+    }
+  }
+  settings.set('guttered.enabled', false);
+  await controller.compare(document.api);
+  assert.ok([...view.decorations.values()].every(ranges => ranges.length === 0));
 });
 
 test('background windows skip polling and focus restoration triggers a refresh', async t => {

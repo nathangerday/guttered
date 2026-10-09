@@ -182,8 +182,9 @@ export async function run(): Promise<void> {
   git(root, 'checkout', 'feature');
   await waitFor(() => comparison()?.snapshot.branch === 'feature' && comparison()?.diff.hunks.length === 1, 'switching back shows committed feature changes');
   git(root, 'rebase', 'trunk');
-  await waitFor(() => comparison()?.snapshot.mergeBase === git(root, 'rev-parse', 'trunk'), 'rebase advances the merge base');
-  assert.equal(comparison()!.diff.hunks.length, 1);
+  // Git refs and VS Code's reloaded file contents arrive in separate events.
+  await waitFor(() => comparison()?.snapshot.mergeBase === git(root, 'rev-parse', 'trunk')
+    && comparison()?.diff.hunks.length === 1, 'rebase updates the merge base and editor contents');
   git(root, 'reset', '--hard', 'trunk');
   await waitFor(() => comparison()?.diff.hunks.length === 0, 'reset clears decorations automatically');
   console.log('PASS: automatic fetch, branch switch, rebase and reset updates');
