@@ -1,0 +1,198 @@
+{
+  "name": "guttered",
+  "displayName": "Guttered",
+  "icon": "assets/icon.png",
+  "description": "Live gutter indicators for your branch's changes since its merge base, including unsaved edits.",
+  "version": "0.1.0",
+  "publisher": "guttered",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nathangerday/guttered.git"
+  },
+  "homepage": "https://github.com/nathangerday/guttered#readme",
+  "bugs": {
+    "url": "https://github.com/nathangerday/guttered/issues"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "gutter",
+    "branch",
+    "merge-base",
+    "diff"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": false
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "check": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "test:integration": "npm run build && node scripts/test-integration.mjs",
+    "vscode:prepublish": "npm run check && npm run build",
+    "package": "vsce package --no-dependencies"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "guttered.actions",
+        "title": "Guttered: Comparison Actions",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "guttered.refresh",
+        "title": "Guttered: Refresh Comparison"
+      },
+      {
+        "command": "guttered.changeBase",
+        "title": "Guttered: Change Base Reference"
+      },
+      {
+        "command": "guttered.openDiff",
+        "title": "Guttered: Open Diff with Merge Base",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "guttered.nextChange",
+        "title": "Guttered: Go to Next Change"
+      },
+      {
+        "command": "guttered.previousChange",
+        "title": "Guttered: Go to Previous Change"
+      },
+      {
+        "command": "guttered.restoreChange",
+        "title": "Guttered: Restore Change from Merge Base"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "submenu": "guttered.context",
+          "when": "resourceScheme == file",
+          "group": "9_cutcopypaste@20"
+        }
+      ],
+      "guttered.context": [
+        {
+          "command": "guttered.openDiff",
+          "group": "1_compare"
+        },
+        {
+          "command": "guttered.nextChange",
+          "group": "2_navigate"
+        },
+        {
+          "command": "guttered.previousChange",
+          "group": "2_navigate"
+        },
+        {
+          "command": "guttered.restoreChange",
+          "group": "3_restore"
+        }
+      ]
+    },
+    "submenus": [
+      {
+        "id": "guttered.context",
+        "label": "Guttered"
+      }
+    ],
+    "configuration": {
+      "title": "Guttered",
+      "properties": {
+        "guttered.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Continuously compare editors with the branch's merge base."
+        },
+        "guttered.baseReference": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Optional Git reference override. Leave empty to detect the remote default branch (origin, or the first remote). All comparisons use the merge base with HEAD."
+        },
+        "guttered.debounceMs": {
+          "type": "number",
+          "default": 250,
+          "minimum": 50,
+          "maximum": 2000,
+          "scope": "resource",
+          "description": "Delay in milliseconds before updating indicators after edits."
+        },
+        "guttered.maxFileSizeKB": {
+          "type": "number",
+          "default": 1024,
+          "minimum": 1,
+          "maximum": 10240,
+          "scope": "resource",
+          "description": "Skip comparisons when either file exceeds this size in KiB. Very complex diffs also have a time limit."
+        },
+        "guttered.gutter": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Show gutter icons. Disable if another extension uses the same gutter space; overview markers and actions remain available."
+        },
+        "guttered.overviewRuler": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Show change markers in the editor overview ruler."
+        },
+        "guttered.colors.added": {
+          "type": "string",
+          "default": "#4CAF50",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "scope": "resource",
+          "description": "Color of added lines (hex RGB)."
+        },
+        "guttered.colors.modified": {
+          "type": "string",
+          "default": "#E6A817",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "scope": "resource",
+          "description": "Color of modified lines (hex RGB)."
+        },
+        "guttered.colors.deleted": {
+          "type": "string",
+          "default": "#F44336",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "scope": "resource",
+          "description": "Color of deletion positions (hex RGB)."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "diff": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "~1.95.0",
+    "@vscode/test-electron": "^3.0.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.0.0",
+    "typescript": "^5.9.0"
+  }
+}

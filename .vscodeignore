@@ -1,0 +1,15 @@
+.vscode/**
+.vscode-test/**
+src/**
+test/**
+scripts/**
+assets/**
+!assets/icon.png
+node_modules/**
+dist/*.map
+dist/integration.js
+.gitignore
+.vscodeignore
+tsconfig.json
+package-lock.json
+**/*.vsix
