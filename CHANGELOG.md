@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3
+
+- Keep the Source Control icon's count limited to VS Code's local changes by removing Guttered's branch-change badge.
+
 ## 0.4.2
 
 - Explain merge-base comparison with a branch-history diagram and screenshots of the markers, changed-files tree, and hover preview.

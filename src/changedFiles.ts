@@ -30,6 +30,7 @@ export class ChangedFiles implements vscode.TreeDataProvider<FileNode>, vscode.F
   private timer?: ReturnType<typeof setTimeout>;
 
   constructor(private readonly controller: Controller) {
+    // Leave the view badge unset: VS Code adds it to the Source Control icon count.
     this.view = vscode.window.createTreeView('guttered.changedFiles', { treeDataProvider: this, showCollapseAll: true });
     this.view.title = 'Guttered: Branch Changes';
     this.anchor = vscode.window.activeTextEditor?.document.uri;
@@ -174,7 +175,6 @@ export class ChangedFiles implements vscode.TreeDataProvider<FileNode>, vscode.F
     this.nodes = fileTree(files);
     this.view.message = message;
     this.view.description = snapshot ? `${path.basename(snapshot.root)} · ${snapshot.baseRef} (merge-base)` : undefined;
-    this.view.badge = { value: files.length, tooltip: `${files.length} changed files` };
     this.changed.fire();
   }
 
