@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+- Fix the invisible Toggle On/Off button in the Branch Changes toolbar by using a supported VS Code icon.
+
 ## 0.4.0
 
 - Toggle Guttered on or off for the whole workspace from the actions menu or Command Palette; remember the choice without changing per-folder settings.

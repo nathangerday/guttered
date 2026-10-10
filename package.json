@@ -3,7 +3,7 @@
   "displayName": "Guttered",
   "icon": "assets/icon.png",
   "description": "Live gutter indicators for your branch's changes since its merge base, including unsaved edits.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "guttered",
   "license": "MIT",
   "repository": {
@@ -55,7 +55,7 @@
       {
         "command": "guttered.toggle",
         "title": "Guttered: Toggle On/Off",
-        "icon": "$(power)"
+        "icon": "$(circle-slash)"
       },
       {
         "command": "guttered.showChangedFiles",
