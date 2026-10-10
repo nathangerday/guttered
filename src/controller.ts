@@ -39,6 +39,8 @@ export interface GitExtension { getAPI(version: 1): GitAPI }
 
 export class Controller implements vscode.Disposable {
   readonly git: GitService;
+  private readonly comparisonChanged = new vscode.EventEmitter<void>();
+  readonly onDidChangeComparison = this.comparisonChanged.event;
   private readonly decorations = new Decorations();
   private readonly status = vscode.window.createStatusBarItem('guttered.comparison', vscode.StatusBarAlignment.Left, 99);
   private readonly output = vscode.window.createOutputChannel('Guttered');
@@ -80,6 +82,7 @@ export class Controller implements vscode.Disposable {
         this.decorations.dispose();
         this.states.clear();
         this.requests.clear();
+        this.comparisonChanged.fire();
         this.visibleChanged();
         void this.refresh();
       }),
@@ -231,9 +234,13 @@ export class Controller implements vscode.Disposable {
     }
     if (!valid()) return;
     if (state.reason && state.reason !== this.states.get(key)?.reason) this.output.appendLine(`${document.uri.fsPath}: ${state.reason}`);
+    const previous = this.getComparison(document.uri);
     this.states.set(key, state);
     for (const editor of vscode.window.visibleTextEditors) {
       if (editor.document === document) this.decorations.apply(editor, state.comparison?.diff, config);
+    }
+    if (previous?.diff !== state.comparison?.diff || previous?.snapshot.key !== state.comparison?.snapshot.key) {
+      this.comparisonChanged.fire();
     }
     this.updateStatus();
     return state.comparison;
@@ -277,6 +284,7 @@ export class Controller implements vscode.Disposable {
     for (const timer of this.timers.values()) clearTimeout(timer);
     for (const subscription of this.gitSubscriptions.values()) subscription.dispose();
     for (const disposable of this.disposables) disposable.dispose();
+    this.comparisonChanged.dispose();
     this.decorations.dispose();
     this.status.dispose();
     this.output.dispose();

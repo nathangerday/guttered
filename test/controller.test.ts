@@ -11,9 +11,11 @@ class Event<T> {
     this.listeners.add(listener);
     return { dispose: () => this.listeners.delete(listener) };
   };
+  readonly event = this.subscribe;
   fire(value: T): void {
     for (const listener of this.listeners) listener(value);
   }
+  dispose(): void { this.listeners.clear(); }
 }
 
 const visibleChanged = new Event<void>();
@@ -39,6 +41,7 @@ const fakeWindow = {
   },
 };
 const fakeVSCode = {
+  EventEmitter: Event,
   window: fakeWindow,
   workspace: {
     getConfiguration: (section: string) => ({ get: (key: string, fallback?: unknown) => settings.get(`${section}.${key}`) ?? fallback }),
@@ -135,6 +138,27 @@ test('commands and background refreshes share an in-flight comparison', async t 
   assert.ok(first);
   assert.equal(first, second);
   assert.equal(readBaseline.mock.callCount(), 1);
+});
+
+test('comparison notifications refresh hovers for changes without repeating on idle polls', async t => {
+  const { controller, document, snapshot, readSnapshot } = setup(t);
+  let notifications = 0;
+  const listener = controller.onDidChangeComparison(() => notifications++);
+  await controller.compare(document.api);
+  assert.equal(notifications, 1);
+  await controller.compare(document.api, true);
+  assert.equal(notifications, 1, 'unchanged references and text do not refresh hover targets');
+  readSnapshot.mock.mockImplementation(async () => ({ ...snapshot, key: 'new-reference', baseRef: 'origin/release' }));
+  await controller.compare(document.api, true);
+  assert.equal(notifications, 2, 'a new reference refreshes even when the diff is unchanged');
+  document.text = 'another edit\n';
+  document.version++;
+  await controller.compare(document.api);
+  assert.equal(notifications, 3);
+  settings.set('guttered.enabled', false);
+  await controller.compare(document.api);
+  assert.equal(notifications, 4, 'inactive comparisons remove hover targets');
+  listener.dispose();
 });
 
 test('an edit discards a delayed result before the debounce timer runs', async t => {
@@ -250,10 +274,16 @@ test('markers reserve an equal inset on every line and leave the breakpoint gutt
   for (const [key, ranges] of view.decorations) {
     const options = decorationOptions.get(key)!;
     assert.equal(options.gutterIconPath, undefined);
+    if (options.after) {
+      assert.equal(options.isWholeLine, false, 'overlays stay at column zero');
+      assert.deepEqual(options.after, { contentText: '', width: '0px' });
+      continue;
+    }
+    assert.equal(options.isWholeLine, true, 'the inset precedes inlay hints');
     assert.equal(options.before?.width, '3px');
     assert.equal(options.before?.margin, '0 5px 0 0');
     assert.equal(options.before?.height, '1lh');
-    assert.deepEqual(options.after, { contentText: '', width: '0px' });
+    assert.equal(options.after, undefined);
     insetLines.push(...ranges.map(range => range.start.line));
     if (options.before?.backgroundColor) markedLines.push(...ranges.map(range => range.start.line));
   }

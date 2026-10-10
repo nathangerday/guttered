@@ -1,6 +1,28 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { computeDiff, hunkAtLine, hunkLine, lineMarkers, minimalTextChange, restoreHunk } from '../src/diff';
+import { computeDiff, hunkAtLine, hunkLine, lineMarkers, minimalTextChange, previewHunk, restoreHunk } from '../src/diff';
+
+test('hunk previews distinguish removed and added lines, including blank lines and a missing final newline', () => {
+  const hunk = computeDiff('keep\nold\n\n', 'keep\nnew\nlast').hunks[0]!;
+  assert.deepEqual(previewHunk(hunk), {
+    text: '@@ -2,2 +2,2 @@\n-old\n-\n+new\n+last\n\\ No newline at end of file',
+    truncated: false,
+  });
+  assert.equal(previewHunk(computeDiff('', 'new\n').hunks[0]!).text, '@@ -0,0 +1,1 @@\n+new');
+  assert.equal(previewHunk(computeDiff('old\n', '').hunks[0]!).text, '@@ -1,1 +0,0 @@\n-old');
+});
+
+test('large hunk previews stay bounded and show both sides of a replacement', () => {
+  const hunk = computeDiff('old\n'.repeat(500), 'new\n'.repeat(500)).hunks[0]!;
+  const preview = previewHunk(hunk);
+  assert.equal(preview.truncated, true);
+  assert.equal(preview.text.split('\n').length, 25);
+  assert.ok(preview.text.includes('-old') && preview.text.includes('+new'));
+  const long = previewHunk(computeDiff('', 'x'.repeat(100_000) + '\n').hunks[0]!);
+  assert.equal(long.truncated, true);
+  assert.ok(long.text.length < 500);
+  assert.ok(long.text.endsWith('…'));
+});
 
 test('normalizes CRLF without ignoring a missing final newline or whitespace changes', () => {
   assert.equal(computeDiff('a\r\nb\r\n', 'a\nb\n').hunks.length, 0);

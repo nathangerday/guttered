@@ -15,6 +15,22 @@ export interface LineDiff {
   deleted: Deletion[];
 }
 
+/** Keep hover previews small, even for new files or very long lines. */
+export function previewHunk(hunk: Hunk): { text: string; truncated: boolean } {
+  const rows = [`@@ -${hunk.oldStart + (hunk.oldLines.length ? 1 : 0)},${hunk.oldLines.length} +${hunk.newStart + (hunk.newLines.length ? 1 : 0)},${hunk.newLines.length} @@`];
+  let truncated = false;
+  for (const [prefix, content] of [['-', hunk.oldLines], ['+', hunk.newLines]] as const) {
+    truncated ||= content.length > 12;
+    for (const line of content.slice(0, 12)) {
+      const text = line.replace(/\n$/, '');
+      truncated ||= text.length > 400;
+      rows.push(prefix + text.slice(0, 400) + (text.length > 400 ? '…' : ''));
+      if (!line.endsWith('\n')) rows.push('\\ No newline at end of file');
+    }
+  }
+  return { text: rows.join('\n'), truncated };
+}
+
 // Retain line terminators so a missing final newline remains a real edit.
 export function lines(text: string): string[] {
   return text.replace(/\r\n/g, '\n').match(/[^\n]*\n|[^\n]+$/g) ?? [];

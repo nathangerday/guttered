@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Preview merge-base changes by hovering over a marker, with a link to open VS Code's diff view at that change.
+- Keep marker previews separate from language documentation, without changing the text inset. Previews require visible inlay hints with padding off.
+
 ## 0.2.0
 
 - Move change markers into a consistent 8 px inset before the text, leaving breakpoint clicks and other gutter controls available.

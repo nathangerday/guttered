@@ -3,6 +3,7 @@ import path from 'node:path';
 import { configuration } from './config';
 import { Controller, type Comparison, type GitAPI, type GitExtension } from './controller';
 import { hunkAtLine, hunkLine, minimalTextChange, restoreHunk } from './diff';
+import { ChangeHover } from './hover';
 
 const baselineScheme = 'guttered-base';
 
@@ -18,6 +19,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
   }
   const controller = new Controller(gitApi);
   context.subscriptions.push(controller);
+  context.subscriptions.push(vscode.languages.registerInlayHintsProvider({ scheme: 'file' }, new ChangeHover(controller)));
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(baselineScheme, {
     async provideTextDocumentContent(uri) {
       const { root, mergeBase, file, maxBytes } = JSON.parse(uri.query) as { root: string; mergeBase: string; file: string; maxBytes: number };
@@ -32,10 +34,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
     },
   }));
 
-  const command = (name: string, action: () => unknown) => {
-    context.subscriptions.push(vscode.commands.registerCommand(`guttered.${name}`, async () => {
+  const command = (name: string, action: (...args: unknown[]) => unknown) => {
+    context.subscriptions.push(vscode.commands.registerCommand(`guttered.${name}`, async (...args: unknown[]) => {
       try {
-        return await action();
+        return await action(...args);
       } catch (error) {
         void vscode.window.showErrorMessage(`Guttered: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -73,15 +75,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
     const target = folder ? vscode.ConfigurationTarget.WorkspaceFolder : vscode.ConfigurationTarget.Global;
     await vscode.workspace.getConfiguration('guttered', uri).update('baseReference', value.trim(), target);
   });
-  command('openDiff', () => withComparison(async (editor, comparison) => {
-    const { snapshot, path: file } = comparison;
-    const uri = vscode.Uri.from({
-      scheme: baselineScheme, path: `/${file}`,
-      query: JSON.stringify({ root: snapshot.root, mergeBase: snapshot.mergeBase, file, maxBytes: configuration(editor.document.uri).maxBytes }),
+  command('openDiff', async (targetUri, targetLine) => {
+    if (targetUri !== undefined) {
+      if (typeof targetUri !== 'string' || typeof targetLine !== 'number' || !Number.isSafeInteger(targetLine) || targetLine < 0) {
+        throw new Error('Invalid diff target.');
+      }
+      // Hover links target their own document, even if focus has moved to a split editor.
+      const document = vscode.workspace.textDocuments.find(document => document.uri.scheme === 'file' && document.uri.toString() === targetUri);
+      if (!document || document.isClosed) return;
+      await vscode.window.showTextDocument(document);
+      if (vscode.window.activeTextEditor?.document !== document) return;
+    }
+    return withComparison(async (editor, comparison) => {
+      const { snapshot, path: file } = comparison;
+      const uri = vscode.Uri.from({
+        scheme: baselineScheme, path: `/${file}`,
+        query: JSON.stringify({ root: snapshot.root, mergeBase: snapshot.mergeBase, file, maxBytes: configuration(editor.document.uri).maxBytes }),
+      });
+      const selection = typeof targetLine === 'number'
+        ? new vscode.Range(Math.min(targetLine, editor.document.lineCount - 1), 0, Math.min(targetLine, editor.document.lineCount - 1), 0)
+        : undefined;
+      await vscode.commands.executeCommand('vscode.diff', uri, editor.document.uri,
+        `${path.basename(file)} · ${snapshot.baseRef} merge-base ${snapshot.mergeBase.slice(0, 8)}`, { preview: true, selection });
     });
-    await vscode.commands.executeCommand('vscode.diff', uri, editor.document.uri,
-      `${path.basename(file)} · ${snapshot.baseRef} merge-base ${snapshot.mergeBase.slice(0, 8)}`, { preview: true });
-  }));
+  });
   for (const [name, direction] of [['nextChange', 1], ['previousChange', -1]] as const) {
     command(name, () => withComparison((editor, comparison) => {
       const targets = [...new Set(comparison.diff.hunks.map(hunk => hunkLine(hunk, editor.document.lineCount)))];
