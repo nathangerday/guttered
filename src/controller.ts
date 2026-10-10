@@ -41,6 +41,8 @@ export class Controller implements vscode.Disposable {
   readonly git: GitService;
   private readonly comparisonChanged = new vscode.EventEmitter<void>();
   readonly onDidChangeComparison = this.comparisonChanged.event;
+  private readonly refreshed = new vscode.EventEmitter<void>();
+  readonly onDidRefresh = this.refreshed.event;
   private readonly decorations = new Decorations();
   private readonly status = vscode.window.createStatusBarItem('guttered.comparison', vscode.StatusBarAlignment.Left, 99);
   private readonly output = vscode.window.createOutputChannel('Guttered');
@@ -58,7 +60,7 @@ export class Controller implements vscode.Disposable {
   private manualRefreshRequested = false;
   private disposed = false;
 
-  constructor(api?: GitAPI) {
+  constructor(api?: GitAPI, private active = true) {
     const configuredPaths = vscode.workspace.getConfiguration('git').get<string | string[] | null>('path');
     this.git = new GitService(new Git(api?.git.path || configuredPaths || 'git'));
     this.status.name = 'Guttered comparison';
@@ -83,6 +85,7 @@ export class Controller implements vscode.Disposable {
         this.states.clear();
         this.requests.clear();
         this.comparisonChanged.fire();
+        this.refreshed.fire();
         this.visibleChanged();
         void this.refresh();
       }),
@@ -94,6 +97,25 @@ export class Controller implements vscode.Disposable {
     this.poll.unref();
     if (api) this.connectGitEvents(api);
     this.visibleChanged();
+  }
+
+  get enabled(): boolean { return this.active; }
+
+  setEnabled(enabled: boolean): void {
+    if (this.active === enabled) return;
+    this.active = enabled;
+    for (const timer of this.timers.values()) clearTimeout(timer);
+    this.timers.clear();
+    this.requests.clear();
+    this.states.clear();
+    this.decorations.dispose();
+    this.comparisonChanged.fire();
+    this.refreshed.fire();
+    this.updateStatus();
+    if (enabled) {
+      this.visibleChanged();
+      void this.refresh(true);
+    }
   }
 
   private connectGitEvents(api: GitAPI): void {
@@ -129,6 +151,7 @@ export class Controller implements vscode.Disposable {
   }
 
   private schedule(document: vscode.TextDocument, immediate = false): void {
+    if (!this.active || this.disposed) return;
     const visible = vscode.window.visibleTextEditors.some(editor => editor.document === document);
     if (document.uri.scheme !== 'file' || !visible) return;
     const key = document.uri.toString();
@@ -142,7 +165,7 @@ export class Controller implements vscode.Disposable {
   }
 
   refresh(manual = false): Promise<void> {
-    if (this.disposed) return Promise.resolve();
+    if (this.disposed || !this.active) return Promise.resolve();
     this.refreshRequested = true;
     this.manualRefreshRequested ||= manual;
     this.refreshTask ??= this.refreshLoop().finally(() => { this.refreshTask = undefined; });
@@ -151,6 +174,7 @@ export class Controller implements vscode.Disposable {
 
   private async refreshLoop(): Promise<void> {
     do {
+      if (!this.active) break;
       this.refreshRequested = false;
       if (this.manualRefreshRequested) {
         this.manualRefreshRequested = false;
@@ -162,11 +186,12 @@ export class Controller implements vscode.Disposable {
       this.git.resetDiscovery();
       const documents = new Set(vscode.window.visibleTextEditors.map(editor => editor.document));
       await Promise.all([...documents].map(document => this.compare(document, true)));
-    } while (this.refreshRequested && !this.disposed);
+    } while (this.refreshRequested && !this.disposed && this.active);
+    this.refreshed.fire();
   }
 
   async compare(document: vscode.TextDocument, refreshRefs = false): Promise<Comparison | undefined> {
-    if (this.disposed || document.isClosed || document.uri.scheme !== 'file') return;
+    if (this.disposed || !this.active || document.isClosed || document.uri.scheme !== 'file') return;
     const key = document.uri.toString();
     const running = this.pending.get(key);
     const canShare = running?.version === document.version && running.request === this.requests.get(key);
@@ -191,7 +216,7 @@ export class Controller implements vscode.Disposable {
   private async calculate(document: vscode.TextDocument, refreshRefs: boolean, request: number, config: Configuration): Promise<Comparison | undefined> {
     const key = document.uri.toString();
     const version = document.version;
-    const valid = () => !this.disposed && !document.isClosed && document.version === version && this.requests.get(key) === request;
+    const valid = () => !this.disposed && this.active && !document.isClosed && document.version === version && this.requests.get(key) === request;
     let state: State;
     try {
       if (!config.enabled) throw new Error('Comparison disabled in Guttered settings.');
@@ -247,7 +272,9 @@ export class Controller implements vscode.Disposable {
   }
 
   getComparison(uri: vscode.Uri): Comparison | undefined { return this.states.get(uri.toString())?.comparison; }
-  reason(uri: vscode.Uri): string | undefined { return this.states.get(uri.toString())?.reason; }
+  reason(uri: vscode.Uri): string | undefined {
+    return this.active ? this.states.get(uri.toString())?.reason : 'Guttered is disabled for this workspace. Use Toggle On/Off to enable it.';
+  }
 
   private updateStatus(): void {
     const editor = vscode.window.activeTextEditor;
@@ -262,7 +289,8 @@ export class Controller implements vscode.Disposable {
     }
     const comparison = state?.comparison;
     const snapshot = comparison?.snapshot;
-    this.status.text = snapshot ? `$(git-compare) ${snapshot.baseRef} (merge-base)` : '$(git-compare) Guttered';
+    this.status.text = !this.active ? '$(circle-slash) Guttered (off)'
+      : snapshot ? `$(git-compare) ${snapshot.baseRef} (merge-base)` : '$(git-compare) Guttered';
     const tooltip = new vscode.MarkdownString();
     tooltip.appendText(comparison
       ? [
@@ -272,7 +300,7 @@ export class Controller implements vscode.Disposable {
         'Comparison: active',
         `Changes: ${comparison.diff.hunks.length}`,
       ].join('\n')
-      : `Comparison: ${state?.reason ?? 'detecting default branch…'}`);
+      : `Comparison: ${this.reason(editor.document.uri) ?? 'detecting default branch…'}`);
     tooltip.appendMarkdown('\n\nClick for comparison actions.');
     this.status.tooltip = tooltip;
     this.status.show();
@@ -285,6 +313,7 @@ export class Controller implements vscode.Disposable {
     for (const subscription of this.gitSubscriptions.values()) subscription.dispose();
     for (const disposable of this.disposables) disposable.dispose();
     this.comparisonChanged.dispose();
+    this.refreshed.dispose();
     this.decorations.dispose();
     this.status.dispose();
     this.output.dispose();

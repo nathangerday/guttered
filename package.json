@@ -3,7 +3,7 @@
   "displayName": "Guttered",
   "icon": "assets/icon.png",
   "description": "Live gutter indicators for your branch's changes since its merge base, including unsaved edits.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "guttered",
   "license": "MIT",
   "repository": {
@@ -53,17 +53,29 @@
   "contributes": {
     "commands": [
       {
+        "command": "guttered.toggle",
+        "title": "Guttered: Toggle On/Off",
+        "icon": "$(power)"
+      },
+      {
+        "command": "guttered.showChangedFiles",
+        "title": "Guttered: Show Changed Files",
+        "icon": "$(list-tree)"
+      },
+      {
         "command": "guttered.actions",
         "title": "Guttered: Comparison Actions",
         "icon": "$(git-compare)"
       },
       {
         "command": "guttered.refresh",
-        "title": "Guttered: Refresh Comparison"
+        "title": "Guttered: Refresh Comparison",
+        "icon": "$(refresh)"
       },
       {
         "command": "guttered.changeBase",
-        "title": "Guttered: Change Base Reference"
+        "title": "Guttered: Change Base Reference",
+        "icon": "$(git-branch)"
       },
       {
         "command": "guttered.openDiff",
@@ -83,7 +95,32 @@
         "title": "Guttered: Restore Change from Merge Base"
       }
     ],
+    "views": {
+      "scm": [
+        {
+          "id": "guttered.changedFiles",
+          "name": "Guttered: Branch Changes"
+        }
+      ]
+    },
     "menus": {
+      "view/title": [
+        {
+          "command": "guttered.toggle",
+          "when": "view == guttered.changedFiles",
+          "group": "navigation@1"
+        },
+        {
+          "command": "guttered.changeBase",
+          "when": "view == guttered.changedFiles",
+          "group": "navigation@2"
+        },
+        {
+          "command": "guttered.refresh",
+          "when": "view == guttered.changedFiles",
+          "group": "navigation@3"
+        }
+      ],
       "editor/context": [
         {
           "submenu": "guttered.context",

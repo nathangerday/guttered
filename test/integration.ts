@@ -154,6 +154,18 @@ export async function run(): Promise<void> {
   assert.equal(document.lineAt(1).text, 'committed-feature');
   console.log('PASS: unsaved changes, navigation, restore, Undo, and unchanged Git index');
 
+  const beforeToggle = document.getText();
+  await vscode.commands.executeCommand('guttered.toggle');
+  assert.equal(controller.enabled, false);
+  assert.equal(controller.getComparison(document.uri), undefined);
+  assert.equal(await changeHover(document, 7), undefined);
+  assert.equal(document.getText(), beforeToggle, 'toggle preserves unsaved edits');
+  await vscode.commands.executeCommand('guttered.toggle');
+  await waitFor(() => comparison()?.version === document.version, 'toggle restores live comparison');
+  assert.equal(controller.enabled, true);
+  assert.equal((await changeHover(document, 7))?.value, unsavedHover.value);
+  console.log('PASS: workspace toggle removes and restores comparison and marker previews without changing the buffer');
+
   await vscode.commands.executeCommand('guttered.openDiff');
   await waitFor(() => vscode.workspace.textDocuments.some(doc => doc.uri.scheme === 'guttered-base'), 'baseline diff document opens');
   const baselineDocument = vscode.workspace.textDocuments.find(doc => doc.uri.scheme === 'guttered-base')!;

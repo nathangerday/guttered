@@ -14,7 +14,7 @@ You need desktop VS Code, Git 2.30 or newer, and a trusted workspace. Guttered u
 
 The extension supports VS Code 1.95 and newer.
 
-Download [guttered-0.3.0.vsix](https://github.com/nathangerday/guttered/releases/download/v0.3.0/guttered-0.3.0.vsix), then run **Extensions: Install from VSIX…** in VS Code and select the file. Open a file in a Git repository to start comparing automatically.
+Download [guttered-0.4.0.vsix](https://github.com/nathangerday/guttered/releases/download/v0.4.0/guttered-0.4.0.vsix), then run **Extensions: Install from VSIX…** in VS Code and select the file. Open a file in a Git repository to start comparing automatically.
 
 To build the extension from this repository, use Node.js 22 or newer:
 
@@ -31,8 +31,16 @@ Hover over a branch-change marker to preview the removed and added lines. Click 
 
 Marker previews stay separate from code documentation. They require visible inlay hints and **Editor: Inlay Hints: Padding** turned off (VS Code's defaults). If hints are hidden or padded, the markers and **Guttered: Open Diff with Merge Base** command still work.
 
+**Guttered: Toggle On/Off** disables or enables Guttered across the current workspace. Turning it off removes markers and previews, clears the changed-files view, and stops comparison updates. The choice is remembered for that workspace; enabling Guttered again preserves your per-folder settings and unsaved edits.
+
+The **Guttered: Branch Changes** section in Source Control lists changed files from the active file's repository, grouped under their parent folders. It uses the selected reference's merge base and includes committed, staged, unstaged, untracked, and unsaved changes. With no file selected, it uses the first workspace folder. Files use your file icon theme, with **A** (green), **M** (blue), and **D** (red) badges for added, modified, and deleted files. Badge colors follow your theme's Git gutter colors. Click a file to compare its read-only merge-base version on the left with the working file, including unsaved edits, on the right. Added files have an empty left side; deleted files have an empty right side. Baseline loading keeps the existing text and size limits. Renames appear as a deletion and an addition, matching the gutter's path-based comparison.
+
+The tree updates automatically while visible. It lists saved file changes through Git and applies open, unsaved buffers on top, so restoring a buffer to the baseline removes that file from the list. Binary and large files can appear in the tree even when their gutter comparison is unavailable. The view's toolbar offers toggle, reference selection, and refresh.
+
 A *hunk* is a group of adjacent changed lines. The available actions are:
 
+- **Toggle On/Off** pauses or resumes Guttered for this workspace. The status bar menu labels the action **Disable Guttered** or **Enable Guttered**.
+- **Show Changed Files** opens the branch-changes tree in Source Control.
 - **Open Diff with Merge Base** compares the merge-base version with your current editor contents, including unsaved edits.
 - **Go to Next/Previous Change** moves between hunks, wrapping at either end of the file.
 - **Restore Change from Merge Base** restores the hunk at the cursor. Put the cursor on a line with a deletion triangle to bring deleted lines back. Restoration edits the buffer and supports normal **Undo**; it does not save or stage. It can reverse committed branch changes in your working file.
@@ -49,7 +57,7 @@ Guttered identifies the repository containing each visible file. It reads `origi
 
 The baseline is `git merge-base HEAD <base-reference>`. Guttered reads the file at that commit with `git show` and calculates a line diff against the live editor buffer. This includes unsaved edits and keeps the comparison tied to the common ancestor as the default branch advances.
 
-Typing updates the indicators after a 250 ms pause by default. Git events and a three-second poll handle branch switches, rebases, merges, resets, fetches, changes to ignore rules, and new nested repositories. Polling pauses while the VS Code window is in the background and resumes when it gains focus. Only visible documents are compared; cached baseline contents and diff results avoid repeated work.
+Typing updates the indicators after a 250 ms pause by default. Git events and a three-second poll handle branch switches, rebases, merges, resets, fetches, changes to ignore rules, and new nested repositories. Polling pauses while the VS Code window is in the background and resumes when it gains focus. Only visible documents receive line comparisons; the changed-files tree also includes unsaved buffers from other open documents. Cached baselines, diffs, and saved-file lists avoid repeated work while typing. A hidden tree does not scan the repository.
 
 Guttered's Git operations are read-only. It never fetches, changes refs, stages files, or changes Git configuration.
 
@@ -103,6 +111,6 @@ npm run package               # Build the VSIX
 
 Desktop tests require a graphical session that can focus the test window. Headless Linux needs Xvfb and a window manager. Set `VSCODE_VERSION` to select a release, for example `VSCODE_VERSION=1.95.3 npm run test:integration`. The tests use temporary repositories and user data and remove them afterward. Prefix environment variables as shown in a POSIX shell; in PowerShell, set them with `$env:NAME = 'value'` before running the command.
 
-The source files follow the work the extension performs: `git.ts` handles Git and its caches, `diff.ts` computes changes and restoration edits, `decorations.ts` draws markers, `hover.ts` previews individual changes, `controller.ts` coordinates updates, `extension.ts` registers commands, and `config.ts` reads settings. The baseline cache is limited to 16 MiB and 256 entries. `diff` is the only runtime dependency and is bundled in the VSIX.
+The source files follow the work the extension performs: `git.ts` handles Git and its caches, `diff.ts` computes changes and restoration edits, `decorations.ts` draws markers, `hover.ts` previews individual changes, `files.ts` combines saved and unsaved file changes and builds their folder tree, `changedFiles.ts` manages the sidebar, `controller.ts` coordinates updates, `extension.ts` registers commands, and `config.ts` reads settings. The baseline cache is limited to 16 MiB and 256 entries. `diff` is the only runtime dependency and is bundled in the VSIX.
 
 The original logo is kept in `assets/logo.png`; the VSIX includes only the smaller `assets/icon.png`.

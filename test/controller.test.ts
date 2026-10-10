@@ -140,6 +140,34 @@ test('commands and background refreshes share an in-flight comparison', async t 
   assert.equal(readBaseline.mock.callCount(), 1);
 });
 
+test('workspace toggle discards pending results, stops Git reads, and resumes comparisons', async t => {
+  const { controller, document, readSnapshot, readBaseline } = setup(t);
+  const entered = deferred();
+  const release = deferred();
+  readBaseline.mock.mockImplementation(async () => {
+    entered.resolve();
+    await release.promise;
+    return { text: 'original\n', exists: true, bytes: 9 };
+  });
+  const pending = controller.compare(document.api);
+  await entered.promise;
+  controller.setEnabled(false);
+  release.resolve();
+  assert.equal(await pending, undefined);
+  assert.equal(controller.getComparison(document.uri), undefined);
+  assert.match(controller.reason(document.uri)!, /disabled for this workspace/);
+  const reads = readSnapshot.mock.callCount();
+  document.version++;
+  textChanged.fire({ document: document.api, contentChanges: [{}] });
+  await controller.refresh(true);
+  await controller.compare(document.api, true);
+  assert.equal(readSnapshot.mock.callCount(), reads, 'disabled comparisons never read Git');
+  controller.setEnabled(true);
+  await controller.refresh();
+  assert.equal(controller.enabled, true);
+  assert.equal(controller.getComparison(document.uri)?.version, document.version);
+});
+
 test('comparison notifications refresh hovers for changes without repeating on idle polls', async t => {
   const { controller, document, snapshot, readSnapshot } = setup(t);
   let notifications = 0;

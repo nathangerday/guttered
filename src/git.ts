@@ -18,6 +18,7 @@ export interface Snapshot {
 }
 export interface Baseline { text: string; exists: boolean; bytes: number }
 export interface Branch { name: string; ref: string }
+export interface FileChange { path: string; status: 'A' | 'M' | 'D' }
 interface BaseCandidate { ref: string; label: string }
 
 class GitError extends Error {
@@ -115,6 +116,25 @@ export class Repository {
       // names when a tag or local branch shadows a remote-tracking branch.
       return ref && !symbolic ? [{ name: ref.replace(/^refs\/(?:heads|remotes)\//, ''), ref }] : [];
     });
+  }
+
+  async changedFiles(mergeBase: string): Promise<FileChange[]> {
+    const [tracked, untracked] = await Promise.all([
+      this.git.text(this.root, ['diff', '--name-status', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', mergeBase, '--']),
+      this.git.text(this.root, ['ls-files', '--others', '--exclude-standard', '-z']),
+    ]);
+    const changes = new Map<string, FileChange['status']>();
+    const entries = tracked.split('\0');
+    for (let index = 0; index + 1 < entries.length; index += 2) {
+      const status = entries[index]!;
+      const file = entries[index + 1]!;
+      changes.set(file, status === 'A' || status === 'D' ? status : 'M');
+    }
+    for (const file of untracked.split('\0')) {
+      // Git reports an untracked nested repository as a directory, not a file.
+      if (file && !file.endsWith('/')) changes.set(file, 'A');
+    }
+    return [...changes].map(([path, status]) => ({ path, status }));
   }
 
   snapshot(reference: string, refresh = false): Promise<Snapshot> {

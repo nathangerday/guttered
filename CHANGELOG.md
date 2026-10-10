@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Toggle Guttered on or off for the whole workspace from the actions menu or Command Palette; remember the choice without changing per-folder settings.
+- Show a folder tree of changed files in Source Control, using the selected merge base and including unsaved buffers. Click a file to open its diff against that merge base, with empty sides for added and deleted files.
+- Use the file icon theme and colored A/M/D badges in the changed-files tree.
+- Update the tree automatically while visible, and stop comparison work when Guttered is off.
+
 ## 0.3.0
 
 - Filter available local and remote-tracking branches when choosing the comparison reference, with the automatic default branch first.

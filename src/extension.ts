@@ -4,6 +4,7 @@ import { configuration } from './config';
 import { Controller, type Comparison, type GitAPI, type GitExtension } from './controller';
 import { hunkAtLine, hunkLine, minimalTextChange, restoreHunk } from './diff';
 import { ChangeHover } from './hover';
+import { ChangedFiles } from './changedFiles';
 
 const baselineScheme = 'guttered-base';
 
@@ -17,8 +18,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
   } catch {
     // Built-in Git is optional; use git.path and reference polling when unavailable.
   }
-  const controller = new Controller(gitApi);
+  const controller = new Controller(gitApi, context.workspaceState.get<boolean>('enabled', true));
   context.subscriptions.push(controller);
+  const changedFiles = new ChangedFiles(controller);
+  context.subscriptions.push(changedFiles);
   context.subscriptions.push(vscode.languages.registerInlayHintsProvider({ scheme: 'file' }, new ChangeHover(controller)));
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(baselineScheme, {
     async provideTextDocumentContent(uri) {
@@ -32,6 +35,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
       }
       return (await controller.git.baseline({ root, mergeBase }, file, maxBytes)).text;
     },
+  }));
+  // Deleted files need an empty right side without recreating a working file.
+  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('guttered-empty', {
+    provideTextDocumentContent: () => '',
   }));
 
   const command = (name: string, action: (...args: unknown[]) => unknown) => {
@@ -59,8 +66,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
   };
 
   command('refresh', () => controller.refresh(true));
+  command('toggle', async () => {
+    const enabled = !controller.enabled;
+    controller.setEnabled(enabled);
+    await context.workspaceState.update('enabled', enabled);
+  });
+  command('showChangedFiles', () => vscode.commands.executeCommand('guttered.changedFiles.focus'));
   command('changeBase', async () => {
-    const activeUri = vscode.window.activeTextEditor?.document.uri;
+    const editorUri = vscode.window.activeTextEditor?.document.uri;
+    const activeUri = editorUri?.scheme === 'file' ? editorUri : changedFiles.uri;
     const uri = activeUri?.scheme === 'file' ? activeUri : vscode.workspace.workspaceFolders?.[0]?.uri;
     const folder = uri ? vscode.workspace.getWorkspaceFolder(uri) : undefined;
     const scope = folder ? `workspace folder "${folder.name}"` : 'user settings, affecting all workspaces';
@@ -149,6 +163,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
   }));
   command('actions', async () => {
     const actions = [
+      { label: controller.enabled ? '$(circle-slash) Disable Guttered' : '$(check) Enable Guttered', command: 'toggle' },
+      { label: '$(list-tree) Show Changed Files', command: 'showChangedFiles' },
       { label: '$(diff) Open Diff with Merge Base', command: 'openDiff' },
       { label: '$(arrow-down) Go to Next Change', command: 'nextChange' },
       { label: '$(arrow-up) Go to Previous Change', command: 'previousChange' },
