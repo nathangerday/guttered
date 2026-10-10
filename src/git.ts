@@ -301,8 +301,29 @@ export class GitService {
     return repository;
   }
 
+  async index(root: string, file: string, maxBytes: number): Promise<{ key: string; baseline: Baseline }> {
+    // Read the index entry each time: staging can change without a buffer edit.
+    // Its immutable blob is cached, so typing and idle polls do not reread text.
+    const entry = await this.git.text(root, ['ls-files', '--stage', '-z', '--', `:(literal)${file}`]);
+    if (!entry) return { key: '', baseline: { text: '', exists: false, bytes: 0 } };
+    const match = /^(\d+) ([a-f0-9]+) 0\t/.exec(entry);
+    if (!match) throw new Error('Comparison paused: resolve this file\'s Git conflicts first.');
+    if (match[1] !== '100644' && match[1] !== '100755') throw new Error('Comparison inactive: the index is not a regular text file.');
+    const blob = match[2]!;
+    const baseline = await this.cachedBaseline(JSON.stringify([root, blob]), maxBytes, async () => {
+      const bytes = Number(await this.git.text(root, ['cat-file', '-s', blob]));
+      if (bytes > maxBytes) throw new Error('Comparison paused: the index exceeds Guttered: Max File Size KB.');
+      return this.decodeBaseline(await this.git.run(root, ['cat-file', 'blob', blob], maxBytes + 4096));
+    });
+    return { key: blob, baseline };
+  }
+
   async baseline(snapshot: Pick<Snapshot, 'root' | 'mergeBase'>, file: string, maxBytes: number): Promise<Baseline> {
-    const key = JSON.stringify([snapshot.root, snapshot.mergeBase, file]);
+    return this.cachedBaseline(JSON.stringify([snapshot.root, snapshot.mergeBase, file]), maxBytes,
+      () => this.readBaseline(snapshot, file, maxBytes));
+  }
+
+  private async cachedBaseline(key: string, maxBytes: number, read: () => Promise<Baseline>): Promise<Baseline> {
     let baseline = this.baselines.get(key);
     if (baseline) {
       this.baselines.delete(key);
@@ -313,7 +334,7 @@ export class GitService {
       const pendingKey = `${key}:${maxBytes}`;
       let pending = this.pendingBaselines.get(pendingKey);
       if (!pending) {
-        pending = this.readBaseline(snapshot, file, maxBytes).then(value => {
+        pending = read().then(value => {
           if (!this.baselines.has(key)) {
             this.baselines.set(key, value);
             this.cacheBytes += value.bytes;
@@ -340,6 +361,10 @@ export class GitService {
     if (!match || match[2] !== 'blob' || match[1] === '120000') throw new Error('Comparison inactive: the baseline is not a regular text file.');
     if (Number(match[3]) > maxBytes) throw new Error('Comparison paused: the baseline exceeds Guttered: Max File Size KB.');
     const buffer = await this.git.run(snapshot.root, ['show', `${snapshot.mergeBase}:${file}`], maxBytes + 4096);
+    return this.decodeBaseline(buffer);
+  }
+
+  private decodeBaseline(buffer: Buffer): Baseline {
     if (buffer.includes(0)) throw new Error('Comparison inactive: the baseline is a binary file.');
     let text: string;
     try {

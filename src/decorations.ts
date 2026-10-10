@@ -1,43 +1,30 @@
 import * as vscode from 'vscode';
 import type { Configuration } from './config';
-import { lineMarkers, type LineDiff, type Marker } from './diff';
+import type { Marker } from './diff';
 
 export class Decorations implements vscode.Disposable {
   private readonly types = new Map<string, vscode.TextEditorDecorationType>();
-  private readonly applied = new Map<vscode.TextEditor, { types: Set<vscode.TextEditorDecorationType>; diff: LineDiff | undefined; version: number }>();
+  private readonly applied = new Map<vscode.TextEditor, { types: Set<vscode.TextEditorDecorationType>; markers: readonly Marker[] | undefined; version: number }>();
 
-  private type(marker: Marker | undefined, config: Configuration, overlay = false): vscode.TextEditorDecorationType {
-    const key = JSON.stringify([overlay, config.gutter, config.overviewRuler, config.opacity, config.added, config.modified, config.deleted, marker?.change, !!marker?.before, !!marker?.after]);
+  private type(marker: Marker, config: Configuration): vscode.TextEditorDecorationType {
+    const key = JSON.stringify([config.gutter, config.overviewRuler, config.opacity, config.branch, !!marker.before, !!marker.after]);
     let type = this.types.get(key);
     if (!type) {
-      const before = marker?.before ? `<path fill="${config.deleted}" d="M0 0h7L0 5z"/>` : '';
-      const after = marker?.after ? `<path fill="${config.deleted}" d="M0 16h7L0 11z"/>` : '';
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="16" viewBox="0 0 8 16" preserveAspectRatio="none" opacity="${config.opacity}">${before}${after}</svg>`;
-      const alpha = Math.round(config.opacity * 255).toString(16).padStart(2, '0');
+      const alpha = (opacity: number) => Math.round(opacity * 255).toString(16).padStart(2, '0');
+      const color = `${config.branch}${alpha(config.opacity)}`;
       type = vscode.window.createTextEditorDecorationType({
-        // Whole-line anchoring puts the inset before inlay hints, so carets stay
-        // at the text edge. Keep the arrow overlay anchored to column zero.
-        isWholeLine: !overlay,
-        // Keep the breakpoint gutter free with a 3 px bar and 5 px gap before text.
-        ...(config.gutter && !overlay ? {
-          before: {
-            // A zero-width space keeps the attachment on the text baseline;
-            // 1lh fills the editor's line height, joining adjacent bars.
-            contentText: '\u200b', width: '3px', height: '1lh', margin: '0 5px 0 0',
-            backgroundColor: marker?.change ? `${config[marker.change]}${alpha}` : undefined,
-          },
+        // Backgrounds and borders paint over the existing line box. Attachments,
+        // injected hints and glyph-margin icons alter layout or intercept clicks.
+        isWholeLine: true,
+        ...(config.gutter ? {
+          backgroundColor: `${config.branch}${alpha(config.opacity * 0.4)}`,
+          ...(marker.before || marker.after ? {
+            borderColor: color,
+            borderStyle: 'dashed',
+            borderWidth: `${marker.before ? 1 : 0}px 0 ${marker.after ? 1 : 0}px 0`,
+          } : {}),
         } : {}),
-        ...(config.gutter && overlay ? {
-          // Draw deletion arrows over the same inset without adding width.
-          // This attachment also keeps empty-line carets and guides aligned.
-          after: before || after ? {
-            contentIconPath: vscode.Uri.parse(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`),
-            width: '8px', height: '1em', margin: '0 0 0 -8px',
-            // Keep icons from raising small text or intercepting the marker hover.
-            textDecoration: 'none; vertical-align: top; pointer-events: none',
-          } : { contentText: '', width: '0px' },
-        } : {}),
-        ...(!overlay && config.overviewRuler && marker ? { overviewRulerColor: `${config[marker.change ?? 'deleted']}${alpha}`, overviewRulerLane: vscode.OverviewRulerLane.Left } : {}),
+        ...(config.overviewRuler ? { overviewRulerColor: color, overviewRulerLane: vscode.OverviewRulerLane.Right } : {}),
         rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
       });
       this.types.set(key, type);
@@ -45,33 +32,23 @@ export class Decorations implements vscode.Disposable {
     return type;
   }
 
-  apply(editor: vscode.TextEditor, diff: LineDiff | undefined, config: Configuration): void {
+  apply(editor: vscode.TextEditor, markers: readonly Marker[] | undefined, config: Configuration): void {
     const previous = this.applied.get(editor);
-    if (previous && previous.diff === diff && previous.version === editor.document.version) return;
+    if (previous && previous.markers === markers && previous.version === editor.document.version) return;
     const groups = new Map<vscode.TextEditorDecorationType, vscode.Range[]>();
-    const markers = new Map((diff ? lineMarkers(diff) : []).map(marker => [marker.line, marker]));
-    // Reserve the same inset on unchanged lines, so edits never shift the code.
-    const lines = config.gutter && diff
-      ? Array.from({ length: editor.document.lineCount }, (_, line) => line)
-      : [...markers.keys()];
-    for (const line of lines) {
-      const marker = markers.get(line);
-      const types = [this.type(marker, config)];
-      if (config.gutter) types.push(this.type(marker, config, true));
-      for (const type of types) {
-        let group = groups.get(type);
-        if (!group) {
-          group = [];
-          groups.set(type, group);
-        }
-        group.push(new vscode.Range(line, 0, line, 0));
+    if (config.gutter || config.overviewRuler) {
+      for (const marker of markers ?? []) {
+        const type = this.type(marker, config);
+        let ranges = groups.get(type);
+        if (!ranges) groups.set(type, ranges = []);
+        ranges.push(new vscode.Range(marker.line, 0, marker.line, 0));
       }
     }
     for (const type of previous?.types ?? this.types.values()) {
       if (!groups.has(type)) editor.setDecorations(type, []);
     }
     for (const [type, ranges] of groups) editor.setDecorations(type, ranges);
-    this.applied.set(editor, { types: new Set(groups.keys()), diff, version: editor.document.version });
+    this.applied.set(editor, { types: new Set(groups.keys()), markers, version: editor.document.version });
   }
 
   retain(editors: readonly vscode.TextEditor[]): void {

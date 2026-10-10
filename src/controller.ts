@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { configuration, type Configuration } from './config';
 import { Decorations } from './decorations';
-import { computeDiff, type LineDiff } from './diff';
+import { branchMarkers, computeDiff, type LineDiff, type Marker } from './diff';
 import { Git, GitService, type Snapshot } from './git';
 
 const REFERENCE_POLL_MS = 3_000;
@@ -12,6 +12,7 @@ export interface Comparison {
   path: string;
   baselineExists: boolean;
   diff: LineDiff;
+  markers: Marker[];
 }
 interface State {
   comparison?: Comparison;
@@ -232,7 +233,9 @@ export class Controller implements vscode.Disposable {
           throw new Error('Comparison inactive: this file is ignored by Git.');
         }
         if (!valid()) return;
-        const diffKey = JSON.stringify([version, snapshot.root, snapshot.mergeBase, location.path, config.maxBytes]);
+        const index = await this.git.index(snapshot.root, location.path, config.maxBytes);
+        if (!valid()) return;
+        const diffKey = JSON.stringify([version, snapshot.root, snapshot.mergeBase, snapshot.head, index.key, location.path, config.maxBytes]);
         const previous = this.states.get(key);
         const canReuseDiff = previous?.diffKey === diffKey;
         if (canReuseDiff) {
@@ -240,6 +243,11 @@ export class Controller implements vscode.Disposable {
             ? { diffKey, comparison: { ...previous.comparison, snapshot } }
             : previous;
         } else {
+          // Git failures can recover without a text/ref change. Keep HEAD reads
+          // outside the cacheable text/algorithm failures below.
+          const head = snapshot.head === snapshot.mergeBase ? baseline
+            : await this.git.baseline({ root: snapshot.root, mergeBase: snapshot.head }, location.path, config.maxBytes);
+          if (!valid()) return;
           // Text/algorithm failures depend on these same inputs. Cache them too,
           // so idle polls neither copy the buffer nor retry an expensive diff.
           try {
@@ -247,7 +255,13 @@ export class Controller implements vscode.Disposable {
             if (Buffer.byteLength(current, 'utf8') > config.maxBytes) throw new Error('Comparison paused: the document exceeds Guttered: Max File Size KB.');
             if (current.includes('\0')) throw new Error('Comparison inactive: this is a binary file.');
             const diff = computeDiff(baseline.text, current);
-            state = { diffKey, comparison: { version, snapshot, path: location.path, baselineExists: baseline.exists, diff } };
+            const localDiff = computeDiff(head.text, current);
+            // The index comparison also catches a staged change reversed in the
+            // working tree, even when the buffer once again matches HEAD.
+            const markers = index.baseline.text === head.text ? branchMarkers(diff, localDiff)
+              : branchMarkers(diff, localDiff, computeDiff(index.baseline.text, current));
+            // Keep the complete comparison for the tree, navigation and restore.
+            state = { diffKey, comparison: { version, snapshot, path: location.path, baselineExists: baseline.exists, diff, markers } };
           } catch (error) {
             state = { diffKey, reason: error instanceof Error ? error.message : String(error) };
           }
@@ -262,7 +276,7 @@ export class Controller implements vscode.Disposable {
     const previous = this.getComparison(document.uri);
     this.states.set(key, state);
     for (const editor of vscode.window.visibleTextEditors) {
-      if (editor.document === document) this.decorations.apply(editor, state.comparison?.diff, config);
+      if (editor.document === document) this.decorations.apply(editor, state.comparison?.markers, config);
     }
     if (previous?.diff !== state.comparison?.diff || previous?.snapshot.key !== state.comparison?.snapshot.key) {
       this.comparisonChanged.fire();

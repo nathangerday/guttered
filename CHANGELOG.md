@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.5
+
+- Distinguish local edits (native colored Git gutter bars) from committed branch changes (subdued violet line shading and dashed deletion boundaries).
+- Remove all text spacers, injected hints, and marker hover targets to preserve caret alignment, wrapping, breakpoint clicks, and documentation hovers.
+- Add **Peek Change**: a read-only, syntax-colored merge-base diff below the source line, available through the editor context menu or Ctrl+K, Ctrl+Alt+D (Cmd on macOS).
+- Exclude staged, unstaged, and unsaved lines from branch shading using HEAD and index comparisons, while retaining them in the tree, previews, navigation, and restore.
+- Cache immutable HEAD/index blobs and reuse unchanged comparisons on idle refreshes.
+- Replace the three branch marker colors with `guttered.colors.branch`. Require VS Code 1.100 for native staged-change indicators.
+
 ## 0.4.3
 
 - Keep the Source Control icon's count limited to VS Code's local changes by removing Guttered's branch-change badge.

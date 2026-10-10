@@ -4,16 +4,29 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { git, commitFile, remoteDefault } from './fixtures';
 import type { Controller } from '../src/controller';
-import { ChangeHover } from '../src/hover';
+import { hunkAtLine } from '../src/diff';
 
 let diagnostics: (() => unknown) | undefined;
-let markerHovers: ChangeHover;
+let activeController: Controller;
+let latestPreviewUri: vscode.Uri;
 
-async function changeHover(document: vscode.TextDocument, line: number, character = 0): Promise<vscode.MarkdownString | undefined> {
-  // VS Code's executeInlayHintProvider command does not resolve lazy tooltips.
-  const hints = markerHovers.provideInlayHints(document, new vscode.Range(line, character, line, Math.max(character, document.lineAt(line).text.length)));
-  const hint = hints?.[0];
-  return (hint && markerHovers.resolveInlayHint(hint)?.tooltip) as vscode.MarkdownString | undefined;
+async function changePreview(document: vscode.TextDocument, line: number): Promise<string | undefined> {
+  let comparison = activeController.getComparison(document.uri);
+  if (!comparison || comparison.version !== document.version) comparison = await activeController.compare(document, true);
+  if (!comparison || comparison.version !== document.version
+    || !hunkAtLine(comparison.diff.hunks, line, document.lineCount)) return;
+  const editor = await vscode.window.showTextDocument(document, { preview: false });
+  editor.selection = new vscode.Selection(line, 0, line, 0);
+  const before = new Set(vscode.workspace.textDocuments.map(doc => doc.uri.toString()));
+  await vscode.commands.executeCommand('guttered.peekChange');
+  await waitFor(() => vscode.workspace.textDocuments.some(doc => doc.uri.scheme === 'guttered-hunk' && !before.has(doc.uri.toString())), 'inline diff preview opens');
+  const preview = vscode.workspace.textDocuments.find(doc => doc.uri.scheme === 'guttered-hunk' && !before.has(doc.uri.toString()))!;
+  assert.equal(preview.languageId, 'diff', 'virtual previews get native diff syntax colors');
+  assert.equal(editor.selection.active.line, line, 'preview preserves the source cursor');
+  const text = preview.getText();
+  latestPreviewUri = preview.uri;
+  await vscode.commands.executeCommand('closeReferenceSearch');
+  return text;
 }
 
 const unicodeCases = [
@@ -40,6 +53,7 @@ export async function run(): Promise<void> {
   git(root, 'config', 'user.name', 'Guttered Tests');
   git(root, 'config', 'commit.gpgsign', 'false');
   await commitFile(root, 'deletions.txt', 'a\nX\nb\nY\nc\n');
+  await commitFile(root, 'branch-deletions.txt', 'a\nX\nb\nY\nc\n');
   for (const sample of unicodeCases) await commitFile(root, `${sample.name}.txt`, sample.baseline);
   await writeFile(path.join(root, 'latin1.properties'), Buffer.from(latin1Content, 'latin1'));
   git(root, 'add', 'latin1.properties');
@@ -47,6 +61,7 @@ export async function run(): Promise<void> {
   const baseline = 'unchanged\ncommitted-base\nseparator1\nstaged-base\nseparator2\nunstaged-base\nseparator3\nunsaved-base\nend\n';
   const ancestor = await commitFile(root, 'file.txt', baseline);
   git(root, 'checkout', '-b', 'feature');
+  await commitFile(root, 'branch-deletions.txt', 'a\nb\nc\n');
   const committed = baseline.replace('committed-base', 'committed-feature');
   const featureCommit = await commitFile(root, 'file.txt', committed);
   git(root, 'checkout', 'trunk');
@@ -62,7 +77,7 @@ export async function run(): Promise<void> {
   const extension = vscode.extensions.getExtension<Controller>('nathangerday.guttered');
   assert.ok(extension, 'Guttered is installed in the extension host');
   const controller = await extension.activate();
-  markerHovers = new ChangeHover(controller);
+  activeController = controller;
   diagnostics = () => ({
     focused: vscode.window.state.focused,
     visible: vscode.window.visibleTextEditors.map(view => ({
@@ -98,7 +113,10 @@ export async function run(): Promise<void> {
   assert.equal(comparison()!.snapshot.mergeBase, ancestor);
   assert.equal(comparison()!.snapshot.baseRef, 'origin/trunk');
   assert.deepEqual(comparison()!.diff.modified.map(range => range.start), [1, 3, 5]);
-  console.log('PASS: default branch detection and committed/staged/unstaged merge-base indicators');
+  assert.deepEqual(comparison()!.markers.map(marker => marker.line), [1], 'local staged and unstaged lines have no branch markers');
+  assert.ok((await changePreview(document, 3))?.includes('+staged-feature'));
+  assert.ok((await changePreview(document, 5))?.includes('+unstaged-feature'));
+  console.log('PASS: complete comparison includes local edits while only committed branch lines have markers');
 
   editor = await vscode.window.showTextDocument(document, { preview: false });
   await editor.edit(edit => edit.replace(document.lineAt(7).range, 'unsaved-feature'));
@@ -112,28 +130,27 @@ export async function run(): Promise<void> {
   }, 'unsaved edits update automatically');
   editor = await vscode.window.showTextDocument(document, { preview: false });
   assert.equal((await readFile(document.uri.fsPath, 'utf8')).includes('unsaved-feature'), false);
-  const unsavedHover = await changeHover(document, 7);
-  assert.ok(unsavedHover);
-  assert.ok(unsavedHover.value.includes('-unsaved-base') && unsavedHover.value.includes('+unsaved-feature'));
-  assert.ok(unsavedHover.value.includes(ancestor.slice(0, 8)));
-  assert.deepEqual(unsavedHover.isTrusted, { enabledCommands: ['guttered.openDiff'] });
-  assert.equal(await changeHover(document, 0), undefined);
-  assert.equal(await changeHover(document, 7, 2), undefined);
+  assert.ok((await changePreview(document, 7))?.includes('+unsaved-feature'), 'local edits remain available in the complete merge-base preview');
+  assert.deepEqual(comparison()!.markers.map(marker => marker.line), [1]);
+  const branchPreview = await changePreview(document, 1);
+  const branchPreviewUri = latestPreviewUri;
+  assert.ok(branchPreview);
+  assert.ok(branchPreview.includes('-committed-base') && branchPreview.includes('+committed-feature'));
+  assert.ok(branchPreview.includes(ancestor.slice(0, 8)));
+  assert.equal(await changePreview(document, 0), undefined);
   const languageHover = vscode.languages.registerHoverProvider({ scheme: 'file', language: 'plaintext' }, {
     provideHover: () => new vscode.Hover('Function documentation'),
   });
   try {
-    const codeHovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', document.uri, new vscode.Position(7, 0));
+    const codeHovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', document.uri, new vscode.Position(1, 0));
     assert.deepEqual(codeHovers.map(hover => hover.contents), [[new vscode.MarkdownString('Function documentation')]],
-      'code hover contains documentation without the branch-change preview');
-    assert.equal((await changeHover(document, 7))?.value, unsavedHover.value, 'marker preview stays separate from language hover providers');
-    const hints = await vscode.commands.executeCommand<vscode.InlayHint[]>('vscode.executeInlayHintProvider', document.uri, new vscode.Range(7, 0, 7, 0));
-    assert.equal(hints.length, 1, 'only the requested marked line has a hover target');
-    assert.equal(hints[0]!.label, '\u200b', 'the hover target adds no visible text');
-    assert.equal(hints[0]!.tooltip, undefined, 'preview content is built only when resolved');
+      'source hover contains documentation without the branch-change preview');
+    const hints = await vscode.commands.executeCommand<vscode.InlayHint[]>('vscode.executeInlayHintProvider', document.uri, new vscode.Range(1, 0, 1, 0));
+    assert.equal(hints.length, 0, 'Guttered adds no injected hint targets');
   } finally {
     languageHover.dispose();
   }
+  editor = await vscode.window.showTextDocument(document, { preview: false });
   editor.selection = new vscode.Selection(0, 0, 0, 0);
   await vscode.commands.executeCommand('guttered.nextChange');
   assert.equal(editor.selection.active.line, 1);
@@ -143,9 +160,8 @@ export async function run(): Promise<void> {
   // Wait for the workbench to apply cursor navigation before the next action.
   editor = await vscode.window.showTextDocument(document, { preview: false });
   assert.equal(editor.selection.active.line, 1);
-  const staleHint = markerHovers.provideInlayHints(document, new vscode.Range(7, 0, 7, 0))![0]!;
   await vscode.commands.executeCommand('guttered.restoreChange');
-  assert.equal(markerHovers.resolveInlayHint(staleHint), undefined, 'an edit invalidates unresolved previews from an older document version');
+  assert.equal((await vscode.workspace.openTextDocument(branchPreviewUri)).getText(), branchPreview, 'opening a preview preserves its snapshot across later edits');
   assert.equal(document.lineAt(1).text, 'committed-base');
   assert.equal(document.lineAt(3).text, 'staged-feature');
   assert.equal(document.lineAt(7).text, 'unsaved-feature');
@@ -158,39 +174,37 @@ export async function run(): Promise<void> {
   await vscode.commands.executeCommand('guttered.toggle');
   assert.equal(controller.enabled, false);
   assert.equal(controller.getComparison(document.uri), undefined);
-  assert.equal(await changeHover(document, 7), undefined);
+  assert.equal(await changePreview(document, 7), undefined);
   assert.equal(document.getText(), beforeToggle, 'toggle preserves unsaved edits');
   await vscode.commands.executeCommand('guttered.toggle');
   await waitFor(() => comparison()?.version === document.version, 'toggle restores live comparison');
   assert.equal(controller.enabled, true);
-  assert.equal((await changeHover(document, 7))?.value, unsavedHover.value);
-  console.log('PASS: workspace toggle removes and restores comparison and marker previews without changing the buffer');
+  assert.ok((await changePreview(document, 1))?.includes('+committed-feature'));
+  console.log('PASS: workspace toggle removes and restores comparison and previews without changing the buffer');
 
   await vscode.commands.executeCommand('guttered.openDiff');
   await waitFor(() => vscode.workspace.textDocuments.some(doc => doc.uri.scheme === 'guttered-base'), 'baseline diff document opens');
   const baselineDocument = vscode.workspace.textDocuments.find(doc => doc.uri.scheme === 'guttered-base')!;
   assert.equal(baselineDocument.getText(), baseline);
   assert.equal(JSON.parse(baselineDocument.uri.query).mergeBase, ancestor);
-  // A hover remains tied to its file and line even when another editor has focus.
-  const hoverLink = /command:guttered.openDiff\?([^)]*)/.exec(unsavedHover.value)!;
-  const linkArgs = JSON.parse(decodeURIComponent(hoverLink[1]!)) as [string, number];
+  // Explicit full-diff targets work even when another file has focus.
   await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(path.join(root, 'deletions.txt')));
-  await vscode.commands.executeCommand('guttered.openDiff', ...linkArgs);
-  await waitFor(() => vscode.window.activeTextEditor?.document === document && vscode.window.activeTextEditor.selection.active.line === 7,
-    'hover diff opens its own document at the hovered change');
+  await vscode.commands.executeCommand('guttered.openDiff', document.uri.toString(), 1);
+  await waitFor(() => vscode.window.activeTextEditor?.document === document && vscode.window.activeTextEditor.selection.active.line === 1,
+    'full diff opens its target document at the requested change');
   assert.equal(document.isDirty, true);
   assert.equal(document.lineAt(7).text, 'unsaved-feature');
   editor = await vscode.window.showTextDocument(document);
-  console.log('PASS: merge-base hover includes unsaved content and opens the native diff at its own change');
+  console.log('PASS: inline previews preserve documentation; full native diff includes unsaved content');
 
   const deletionDocument = await vscode.workspace.openTextDocument(path.join(root, 'deletions.txt'));
   const deletionEditor = await vscode.window.showTextDocument(deletionDocument);
   const deletionRange = () => new vscode.Range(0, 0, deletionDocument.lineCount, 0);
   await deletionEditor.edit(edit => edit.replace(deletionRange(), 'a\nb\nc\n'));
   await waitFor(() => controller.getComparison(deletionDocument.uri)?.diff.deleted.length === 2, 'neighboring deletions appear');
-  assert.ok((await changeHover(deletionDocument, 0))?.value.includes('-X'));
-  assert.ok((await changeHover(deletionDocument, 1))?.value.includes('-Y'));
-  assert.equal(await changeHover(deletionDocument, 2), undefined);
+  assert.ok((await changePreview(deletionDocument, 0))?.includes('-X'), 'local deletion previews remain available');
+  assert.ok((await changePreview(deletionDocument, 1))?.includes('-Y'));
+  assert.ok((await changePreview(deletionDocument, 2))?.includes('-Y'));
   deletionEditor.selection = new vscode.Selection(1, 0, 1, 0);
   await vscode.commands.executeCommand('guttered.restoreChange');
   assert.equal(deletionDocument.getText(), 'a\nb\nY\nc\n');
@@ -198,10 +212,17 @@ export async function run(): Promise<void> {
   assert.equal(deletionDocument.getText(), 'a\nb\nc\n');
   await deletionEditor.edit(edit => edit.replace(deletionRange(), 'b\n'));
   await waitFor(() => controller.getComparison(deletionDocument.uri)?.version === deletionDocument.version, 'overlapping deletion markers update');
-  const sharedHover = await changeHover(deletionDocument, 0);
-  assert.ok(sharedHover?.value.includes('-X') && sharedHover.value.includes('-Y'), 'one hover includes deletions above and below the same line');
+  assert.ok((await changePreview(deletionDocument, 0))?.includes('-X'));
+  assert.deepEqual(controller.getComparison(deletionDocument.uri)!.markers, [], 'local deletions have no branch shading');
   await deletionEditor.edit(edit => edit.replace(deletionRange(), 'a\nX\nb\nY\nc\n'));
   await deletionDocument.save();
+
+  const branchDeletions = await vscode.workspace.openTextDocument(path.join(root, 'branch-deletions.txt'));
+  await vscode.window.showTextDocument(branchDeletions);
+  await waitFor(() => controller.getComparison(branchDeletions.uri)?.version === branchDeletions.version, 'committed deletion comparison loads');
+  assert.ok((await changePreview(branchDeletions, 0))?.includes('-X'));
+  assert.ok((await changePreview(branchDeletions, 1))?.includes('-Y'));
+  console.log('PASS: committed deletion previews remain available while local deletions have no markers');
 
   for (const sample of unicodeCases) {
     const unicodeDocument = await vscode.workspace.openTextDocument(path.join(root, `${sample.name}.txt`));
@@ -240,11 +261,11 @@ export async function run(): Promise<void> {
   const comparisonListener = controller.onDidChangeComparison(() => comparisonEvents++);
   git(root, 'update-ref', 'refs/remotes/origin/trunk', featureCommit);
   await waitFor(() => comparison()?.snapshot.mergeBase === featureCommit && comparison()?.diff.hunks.length === 3, 'ref updates are detected without refresh');
-  assert.ok(comparisonEvents > 0, 'reference changes notify marker hover targets without a document edit');
-  assert.equal(await changeHover(document, 1), undefined, 'a change now in the merge base loses its preview');
+  assert.ok(comparisonEvents > 0, 'reference changes notify comparison consumers without a document edit');
+  assert.equal(await changePreview(document, 1), undefined, 'a change now in the merge base loses its preview');
   git(root, 'fetch', 'origin');
   await waitFor(() => comparison()?.snapshot.mergeBase === ancestor, 'git fetch recalculates the merge base');
-  assert.ok((await changeHover(document, 1))?.value.includes('-committed-base'), 'fetch restores the preview from the new baseline');
+  assert.ok((await changePreview(document, 1))?.includes('-committed-base'), 'fetch restores the preview from the new baseline');
   comparisonListener.dispose();
   await document.save();
   git(root, 'checkout', '-f', 'trunk');
@@ -302,21 +323,12 @@ export async function run(): Promise<void> {
   await newEditor.edit(edit => edit.insert(new vscode.Position(0, 0), 'new\nfile\n'));
   await waitFor(() => controller.getComparison(newDocument.uri)?.diff.added[0]?.count === 2, 'new unsaved file is all added');
   assert.equal(controller.getComparison(newDocument.uri)!.baselineExists, false);
-  const newFileHover = await changeHover(newDocument, 0);
-  assert.ok(newFileHover?.value.includes('+new') && newFileHover.value.includes('+file'));
-  const editorSettings = vscode.workspace.getConfiguration('editor', newDocument.uri);
-  const previousPadding = editorSettings.inspect<boolean>('inlayHints.padding')?.workspaceFolderValue;
-  try {
-    await editorSettings.update('inlayHints.padding', true, vscode.ConfigurationTarget.WorkspaceFolder);
-    assert.equal(await changeHover(newDocument, 0), undefined, 'padded hints cannot widen the text inset');
-  } finally {
-    await editorSettings.update('inlayHints.padding', previousPadding, vscode.ConfigurationTarget.WorkspaceFolder);
-  }
-  assert.ok(await changeHover(newDocument, 0), 'previews resume when hint padding is removed');
+  assert.ok((await changePreview(newDocument, 0))?.includes('+new'), 'new uncommitted files remain available in previews');
+  assert.deepEqual(controller.getComparison(newDocument.uri)!.markers, []);
 
   const config = vscode.workspace.getConfiguration('guttered', newDocument.uri);
   await config.update('gutter', false, vscode.ConfigurationTarget.WorkspaceFolder);
-  assert.equal(await changeHover(newDocument, 0), undefined);
+  assert.ok((await changePreview(newDocument, 0))?.includes('+new'), 'preview commands work when shading is disabled');
   await config.update('gutter', undefined, vscode.ConfigurationTarget.WorkspaceFolder);
   await config.update('maxFileSizeKB', 1, vscode.ConfigurationTarget.WorkspaceFolder);
   await newEditor.edit(edit => edit.insert(new vscode.Position(0, 0), 'x'.repeat(2048)));
@@ -326,7 +338,7 @@ export async function run(): Promise<void> {
   await waitFor(() => !!controller.getComparison(newDocument.uri), 'comparison resumes after raising the size limit');
   await config.update('enabled', false, vscode.ConfigurationTarget.WorkspaceFolder);
   await waitFor(() => /disabled/.test(controller.reason(newDocument.uri) ?? ''), 'disabled settings remove the comparison');
-  assert.equal(await changeHover(newDocument, 0), undefined);
+  assert.equal(await changePreview(newDocument, 0), undefined);
   await config.update('enabled', undefined, vscode.ConfigurationTarget.WorkspaceFolder);
   await waitFor(() => !!controller.getComparison(newDocument.uri), 'reenabling resumes automatically');
   console.log('PASS: untracked unsaved files, large file limits and live configuration');

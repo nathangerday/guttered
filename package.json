@@ -2,8 +2,8 @@
   "name": "guttered",
   "displayName": "Guttered",
   "icon": "assets/icon.png",
-  "description": "Live gutter indicators for your branch's changes since its merge base, including unsaved edits.",
-  "version": "0.4.3",
+  "description": "Distinct branch-change shading alongside native local Git markers, with inline merge-base diff previews.",
+  "version": "0.4.5",
   "publisher": "nathangerday",
   "license": "MIT",
   "repository": {
@@ -15,7 +15,7 @@
     "url": "https://github.com/nathangerday/guttered/issues"
   },
   "engines": {
-    "vscode": "^1.95.0"
+    "vscode": "^1.100.0"
   },
   "categories": [
     "SCM Providers",
@@ -84,6 +84,11 @@
         "icon": "$(git-compare)"
       },
       {
+        "command": "guttered.peekChange",
+        "title": "Guttered: Peek Change",
+        "icon": "$(eye)"
+      },
+      {
         "command": "guttered.nextChange",
         "title": "Guttered: Go to Next Change"
       },
@@ -130,6 +135,10 @@
         }
       ],
       "guttered.context": [
+        {
+          "command": "guttered.peekChange",
+          "group": "1_compare@1"
+        },
         {
           "command": "guttered.openDiff",
           "group": "1_compare"
@@ -189,34 +198,13 @@
           "type": "boolean",
           "default": true,
           "scope": "resource",
-          "description": "Show change markers in a small inset before the text, leaving breakpoint and folding controls free. Overview markers and actions remain available when disabled."
+          "description": "Shade committed branch-change lines without changing text layout. Local edits keep native Git gutter markers. Overview markers and commands remain available when disabled."
         },
         "guttered.overviewRuler": {
           "type": "boolean",
           "default": true,
           "scope": "resource",
-          "description": "Show change markers in the editor overview ruler."
-        },
-        "guttered.colors.added": {
-          "type": "string",
-          "default": "#4CAF50",
-          "pattern": "^#[0-9a-fA-F]{6}$",
-          "scope": "resource",
-          "description": "Color of added lines (hex RGB)."
-        },
-        "guttered.colors.modified": {
-          "type": "string",
-          "default": "#E6A817",
-          "pattern": "^#[0-9a-fA-F]{6}$",
-          "scope": "resource",
-          "description": "Color of modified lines (hex RGB)."
-        },
-        "guttered.colors.deleted": {
-          "type": "string",
-          "default": "#F44336",
-          "pattern": "^#[0-9a-fA-F]{6}$",
-          "scope": "resource",
-          "description": "Color of deletion positions (hex RGB)."
+          "description": "Show violet branch-change markers in the right-hand lane of the editor overview ruler."
         },
         "guttered.opacity": {
           "type": "number",
@@ -224,10 +212,25 @@
           "minimum": 0,
           "maximum": 1,
           "scope": "resource",
-          "description": "Opacity of Guttered markers, including the overview ruler. 0 is invisible and 1 is fully opaque; the default keeps native Git indicators more prominent."
+          "description": "Intensity of branch indicators. Borders and overview markers use this opacity; line backgrounds use 40% of it (12% by default), keeping native local Git bars stronger."
+        },
+        "guttered.colors.branch": {
+          "type": "string",
+          "default": "#8B5CF6",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "scope": "resource",
+          "description": "Color of committed branch shading, deletion boundaries and overview markers (hex RGB). Distinct from native Git local-change colors."
         }
       }
-    }
+    },
+    "keybindings": [
+      {
+        "command": "guttered.peekChange",
+        "key": "ctrl+k ctrl+alt+d",
+        "mac": "cmd+k cmd+alt+d",
+        "when": "editorTextFocus && resourceScheme == file && !isInDiffEditor"
+      }
+    ]
   },
   "dependencies": {
     "diff": "^9.0.0"

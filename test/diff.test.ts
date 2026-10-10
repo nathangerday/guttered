@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { computeDiff, hunkAtLine, hunkLine, lineMarkers, minimalTextChange, previewHunk, restoreHunk } from '../src/diff';
+import { branchMarkers, computeDiff, hunkAtLine, hunkLine, lineMarkers, minimalTextChange, previewHunk, restoreHunk } from '../src/diff';
 
 test('hunk previews distinguish removed and added lines, including blank lines and a missing final newline', () => {
   const hunk = computeDiff('keep\nold\n\n', 'keep\nnew\nlast').hunks[0]!;
@@ -95,6 +95,23 @@ test('one gutter glyph retains overlapping modification and deletion markers', (
   assert.deepEqual(lineMarkers(computeDiff('before\nkeep\nafter\n', 'keep\n')), [
     { line: 0, before: 1, after: 1 },
   ]);
+});
+
+test('branch markers exclude local additions, replacements and deletion anchors after line shifts', () => {
+  const baseline = 'a\nold\nb\nremove\nc\nlocal\nd\n';
+  const head = 'a\ncommitted\nb\nc\nlocal\nd\n';
+  for (const current of [head, 'inserted\n' + head, head.replace('local', 'edited'), head.replace('local\n', '')]) {
+    const markers = branchMarkers(computeDiff(baseline, current), computeDiff(head, current));
+    const offset = current.startsWith('inserted') ? 1 : 0;
+    assert.equal(markers.find(marker => marker.line === 1 + offset)?.change, 'modified');
+    if (!current.includes('local\n') && !current.includes('edited\n')) {
+      assert.equal(markers.some(marker => marker.line === 2 + offset), true, 'separate committed deletion remains');
+    }
+    assert.equal(markers.some(marker => marker.line === current.split('\n').indexOf('edited')), false);
+  }
+  const overlap = head.replace('committed', 'locally edited');
+  assert.equal(branchMarkers(computeDiff(baseline, overlap), computeDiff(head, overlap)).some(marker => marker.line === 1), false);
+  assert.deepEqual(branchMarkers(computeDiff('', 'untracked\n'), computeDiff('', 'untracked\n')), []);
 });
 
 test('restoring a deletion marker chooses that hunk instead of its neighbor', () => {

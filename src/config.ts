@@ -14,9 +14,7 @@ export function configuration(uri: vscode.Uri) {
     gutter: config.get<boolean>('gutter', true),
     overviewRuler: config.get<boolean>('overviewRuler', true),
     opacity: Math.max(0, Math.min(1, config.get<number>('opacity', 0.3))),
-    added: color('added', '#4CAF50'),
-    modified: color('modified', '#E6A817'),
-    deleted: color('deleted', '#F44336'),
+    branch: color('branch', '#8B5CF6'),
   };
 }
 export type Configuration = ReturnType<typeof configuration>;

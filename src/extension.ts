@@ -3,7 +3,7 @@ import path from 'node:path';
 import { configuration } from './config';
 import { Controller, type Comparison, type GitAPI, type GitExtension } from './controller';
 import { hunkAtLine, hunkLine, minimalTextChange, restoreHunk } from './diff';
-import { ChangeHover } from './hover';
+import { ChangePeek } from './peek';
 import { ChangedFiles } from './changedFiles';
 
 const baselineScheme = 'guttered-base';
@@ -22,7 +22,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
   context.subscriptions.push(controller);
   const changedFiles = new ChangedFiles(controller);
   context.subscriptions.push(changedFiles);
-  context.subscriptions.push(vscode.languages.registerInlayHintsProvider({ scheme: 'file' }, new ChangeHover(controller)));
+  const peek = new ChangePeek();
+  context.subscriptions.push(peek, vscode.workspace.registerTextDocumentContentProvider(ChangePeek.scheme, peek));
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(baselineScheme, {
     async provideTextDocumentContent(uri) {
       const { root, mergeBase, file, maxBytes } = JSON.parse(uri.query) as { root: string; mergeBase: string; file: string; maxBytes: number };
@@ -72,6 +73,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
     await context.workspaceState.update('enabled', enabled);
   });
   command('showChangedFiles', () => vscode.commands.executeCommand('guttered.changedFiles.focus'));
+  command('peekChange', () => withComparison(async (editor, comparison) => {
+    const position = editor.selection.active;
+    const hunk = hunkAtLine(comparison.diff.hunks, position.line, editor.document.lineCount);
+    if (!hunk) {
+      void vscode.window.showInformationMessage('Guttered: place the cursor on a changed line or deletion boundary first.');
+      return;
+    }
+    await vscode.commands.executeCommand('editor.action.peekLocations', editor.document.uri, position,
+      [new vscode.Location(peek.create(comparison, hunk), new vscode.Range(3, 0, 3, 0))], 'peek');
+  }));
   command('changeBase', async () => {
     const editorUri = vscode.window.activeTextEditor?.document.uri;
     const activeUri = editorUri?.scheme === 'file' ? editorUri : changedFiles.uri;
@@ -116,7 +127,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
       if (typeof targetUri !== 'string' || typeof targetLine !== 'number' || !Number.isSafeInteger(targetLine) || targetLine < 0) {
         throw new Error('Invalid diff target.');
       }
-      // Hover links target their own document, even if focus has moved to a split editor.
+      // Explicit targets keep their own document, even if focus has moved to a split editor.
       const document = vscode.workspace.textDocuments.find(document => document.uri.scheme === 'file' && document.uri.toString() === targetUri);
       if (!document || document.isClosed) return;
       await vscode.window.showTextDocument(document);
@@ -165,6 +176,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
     const actions = [
       { label: controller.enabled ? '$(circle-slash) Disable Guttered' : '$(check) Enable Guttered', command: 'toggle' },
       { label: '$(list-tree) Show Changed Files', command: 'showChangedFiles' },
+      { label: '$(eye) Peek Change', description: 'Read-only diff below the cursor', command: 'peekChange' },
       { label: '$(diff) Open Diff with Merge Base', command: 'openDiff' },
       { label: '$(arrow-down) Go to Next Change', command: 'nextChange' },
       { label: '$(arrow-up) Go to Previous Change', command: 'previousChange' },

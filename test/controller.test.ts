@@ -52,7 +52,7 @@ const fakeVSCode = {
     onDidChangeWorkspaceFolders: noopEvent,
   },
   StatusBarAlignment: { Left: 1 },
-  OverviewRulerLane: { Left: 1 },
+  OverviewRulerLane: { Left: 1, Right: 4 },
   DecorationRangeBehavior: { ClosedClosed: 1 },
   Uri: { parse: (value: string) => ({ toString: () => value }) },
   Range: class {
@@ -108,17 +108,23 @@ afterEach(() => {
   settings.clear();
   decorationOptions.clear();
 });
-function setup(t: TestContext, document = new Document(), baseline = 'original\n') {
+function setup(t: TestContext, document = new Document(), baseline = 'original\n', head = baseline) {
   const controller = new Controller();
   controllers.push(controller);
   const repository = new Repository('/repo', new Git());
-  const snapshot: Snapshot = { root: '/repo', mergeBase: 'a'.repeat(40), baseRef: 'origin/trunk', branch: 'feature', head: 'b'.repeat(40), baseTip: 'a'.repeat(40), key: 'snapshot' };
+  const snapshot: Snapshot = { root: '/repo', mergeBase: 'a'.repeat(40), baseRef: 'origin/trunk', branch: 'feature', head: (head === baseline ? 'a' : 'b').repeat(40), baseTip: 'a'.repeat(40), key: 'snapshot' };
   const locate = t.mock.method(controller.git, 'locate', async () => ({ repository, path: 'file.txt' }));
   const readSnapshot = t.mock.method(repository, 'snapshot', async () => snapshot);
-  const readBaseline = t.mock.method(controller.git, 'baseline', async () => ({ text: baseline, exists: true, bytes: Buffer.byteLength(baseline) }));
+  const readBaseline = t.mock.method(controller.git, 'baseline', async (ref: Pick<Snapshot, 'root' | 'mergeBase'>) => {
+    const text = ref.mergeBase === snapshot.mergeBase ? baseline : head;
+    return { text, exists: true, bytes: Buffer.byteLength(text) };
+  });
+  const readIndex = t.mock.method(controller.git, 'index', async () => ({
+    key: 'index', baseline: { text: head, exists: true, bytes: Buffer.byteLength(head) },
+  }));
   const view = editor(document);
   fakeWindow.visibleTextEditors = [view.api];
-  return { controller, document, view, repository, snapshot, locate, readSnapshot, readBaseline };
+  return { controller, document, view, repository, snapshot, locate, readSnapshot, readBaseline, readIndex };
 }
 
 test('commands and background refreshes share an in-flight comparison', async t => {
@@ -168,14 +174,14 @@ test('workspace toggle discards pending results, stops Git reads, and resumes co
   assert.equal(controller.getComparison(document.uri)?.version, document.version);
 });
 
-test('comparison notifications refresh hovers for changes without repeating on idle polls', async t => {
+test('comparison notifications refresh consumers for changes without repeating on idle polls', async t => {
   const { controller, document, snapshot, readSnapshot } = setup(t);
   let notifications = 0;
   const listener = controller.onDidChangeComparison(() => notifications++);
   await controller.compare(document.api);
   assert.equal(notifications, 1);
   await controller.compare(document.api, true);
-  assert.equal(notifications, 1, 'unchanged references and text do not refresh hover targets');
+  assert.equal(notifications, 1, 'unchanged references and text do not notify consumers');
   readSnapshot.mock.mockImplementation(async () => ({ ...snapshot, key: 'new-reference', baseRef: 'origin/release' }));
   await controller.compare(document.api, true);
   assert.equal(notifications, 2, 'a new reference refreshes even when the diff is unchanged');
@@ -185,7 +191,7 @@ test('comparison notifications refresh hovers for changes without repeating on i
   assert.equal(notifications, 3);
   settings.set('guttered.enabled', false);
   await controller.compare(document.api);
-  assert.equal(notifications, 4, 'inactive comparisons remove hover targets');
+  assert.equal(notifications, 4, 'inactive comparisons notify consumers');
   listener.dispose();
 });
 
@@ -279,7 +285,7 @@ test('changed ignore rules can resume comparison without an editor edit', async 
 });
 
 test('both split editors receive markers and clear them when text is restored', async t => {
-  const { controller, document, view } = setup(t);
+  const { controller, document, view } = setup(t, new Document(), 'original\n', 'changed\n');
   const second = editor(document);
   fakeWindow.visibleTextEditors.push(second.api);
   await controller.compare(document.api);
@@ -294,41 +300,115 @@ test('both split editors receive markers and clear them when text is restored', 
   assert.equal(count(second), 0);
 });
 
-test('markers reserve an equal inset on every line and leave the breakpoint gutter free', async t => {
-  const { controller, document, view } = setup(t, new Document('same\nchanged\n'), 'same\noriginal\n');
+test('branch shading has no attachments, gutter icons or hover targets and keeps local Git distinct', async t => {
+  const { controller, document, view } = setup(t, new Document('same\nchanged\n'), 'same\noriginal\n', 'same\nchanged\n');
   await controller.compare(document.api);
-  const insetLines: number[] = [];
   const markedLines: number[] = [];
   for (const [key, ranges] of view.decorations) {
     const options = decorationOptions.get(key)!;
     assert.equal(options.gutterIconPath, undefined);
-    if (options.after) {
-      assert.equal(options.isWholeLine, false, 'overlays stay at column zero');
-      assert.deepEqual(options.after, { contentText: '', width: '0px' });
-      continue;
-    }
-    assert.equal(options.isWholeLine, true, 'the inset precedes inlay hints');
-    assert.equal(options.before?.width, '3px');
-    assert.equal(options.before?.margin, '0 5px 0 0');
-    assert.equal(options.before?.height, '1lh');
+    assert.equal(options.before, undefined);
     assert.equal(options.after, undefined);
-    insetLines.push(...ranges.map(range => range.start.line));
-    if (options.before?.backgroundColor) markedLines.push(...ranges.map(range => range.start.line));
+    assert.equal(options.isWholeLine, true);
+    assert.equal(options.backgroundColor, '#8B5CF61f');
+    assert.equal(options.overviewRulerLane, 4, 'branch overview markers use a separate lane');
+    markedLines.push(...ranges.map(range => range.start.line));
   }
-  assert.deepEqual(insetLines.sort(), [0, 1, 2]);
   assert.deepEqual(markedLines, [1]);
   settings.set('guttered.gutter', false);
   document.version++;
   await controller.compare(document.api);
   for (const [key, ranges] of view.decorations) {
-    if (ranges.length) {
-      assert.equal(decorationOptions.get(key)?.before, undefined);
-      assert.equal(decorationOptions.get(key)?.after, undefined);
-    }
+    if (ranges.length) assert.equal(decorationOptions.get(key)?.backgroundColor, undefined);
   }
-  settings.set('guttered.enabled', false);
+  settings.set('guttered.overviewRuler', false);
+  document.version++;
   await controller.compare(document.api);
   assert.ok([...view.decorations.values()].every(ranges => ranges.length === 0));
+});
+
+test('committed deletions use dashed boundaries without adding text or taking the breakpoint gutter', async t => {
+  const { controller, document, view } = setup(t, new Document('a\nb\n'), 'before\na\nafter\nb\n', 'a\nb\n');
+  await controller.compare(document.api);
+  for (const [key, ranges] of view.decorations) {
+    if (!ranges.length) continue;
+    const options = decorationOptions.get(key)!;
+    assert.equal(options.borderWidth, '1px 0 1px 0');
+    assert.equal(options.borderStyle, 'dashed');
+    assert.equal(options.before, undefined);
+    assert.equal(options.after, undefined);
+    assert.equal(options.gutterIconPath, undefined);
+    assert.deepEqual(ranges.map(range => range.start.line), [0]);
+  }
+});
+
+test('local edits keep the complete comparison but receive no decorations', async t => {
+  const baseline = 'same\nbranch-old\nseparator\nlocal-old\n';
+  const head = baseline.replace('branch-old', 'branch-new');
+  const current = head.replace('local-old', 'local-new');
+  const { controller, document, view } = setup(t, new Document(current), baseline, head);
+  const comparison = await controller.compare(document.api);
+  assert.deepEqual(comparison?.diff.modified, [{ start: 1, count: 1 }, { start: 3, count: 1 }]);
+  assert.deepEqual(comparison?.markers.map(marker => marker.line), [1]);
+  for (const ranges of view.decorations.values()) {
+    assert.ok(ranges.every(range => range.start.line === 1));
+  }
+
+  document.text = current.replace('branch-new', 'branch-edited');
+  document.version++;
+  await controller.compare(document.api);
+  assert.deepEqual(controller.getComparison(document.uri)?.markers, []);
+  assert.equal(controller.getComparison(document.uri)?.diff.hunks.length, 2);
+  assert.ok([...view.decorations.values()].every(ranges => ranges.length === 0));
+});
+
+test('committing a local edit updates markers even when the merge base and buffer stay the same', async t => {
+  const { controller, document, readBaseline, readIndex, snapshot } = setup(t);
+  assert.deepEqual((await controller.compare(document.api))?.markers, []);
+  snapshot.head = 'c'.repeat(40);
+  snapshot.key = 'committed-local-edit';
+  readBaseline.mock.mockImplementation(async (ref: Pick<Snapshot, 'root' | 'mergeBase'>) => {
+    const text = ref.mergeBase === snapshot.mergeBase ? 'original\n' : document.text;
+    return { text, exists: true, bytes: Buffer.byteLength(text) };
+  });
+  readIndex.mock.mockImplementation(async () => ({ key: 'committed', baseline: { text: document.text, exists: true, bytes: document.text.length } }));
+  assert.deepEqual((await controller.compare(document.api, true))?.markers.map(marker => marker.line), [0]);
+});
+
+test('a staged edit reversed in the working tree hides the branch marker until the index is restored', async t => {
+  const { controller, document, readIndex } = setup(t, new Document('committed\n'), 'original\n', 'committed\n');
+  readIndex.mock.mockImplementation(async () => ({ key: 'staged', baseline: { text: 'staged\n', exists: true, bytes: 7 } }));
+  assert.deepEqual((await controller.compare(document.api))?.markers, []);
+  readIndex.mock.mockImplementation(async () => ({ key: 'restored', baseline: { text: 'committed\n', exists: true, bytes: 10 } }));
+  assert.deepEqual((await controller.compare(document.api, true))?.markers.map(marker => marker.line), [0]);
+  assert.equal(document.version, 1, 'staging updates are detected without a text edit');
+});
+
+test('a transient HEAD read failure recovers on an ordinary comparison without a text or ref change', async t => {
+  const { controller, document, readBaseline, snapshot } = setup(t, new Document('committed\n'), 'original\n', 'committed\n');
+  let fail = true;
+  readBaseline.mock.mockImplementation(async (ref: Pick<Snapshot, 'root' | 'mergeBase'>) => {
+    if (ref.mergeBase === snapshot.head && fail) {
+      fail = false;
+      throw new Error('Transient HEAD read failure');
+    }
+    const text = ref.mergeBase === snapshot.mergeBase ? 'original\n' : 'committed\n';
+    return { text, exists: true, bytes: text.length };
+  });
+  assert.equal(await controller.compare(document.api), undefined);
+  assert.match(controller.reason(document.uri)!, /Transient HEAD/);
+  assert.deepEqual((await controller.compare(document.api))?.markers.map(marker => marker.line), [0]);
+  assert.equal(document.version, 1);
+});
+
+test('large sparse branch changes decorate only the changed line', async t => {
+  const baseline = Array.from({ length: 15_000 }, (_, index) => `line ${index}\n`).join('');
+  const current = baseline.replace('line 7500\n', 'committed change\n');
+  const { controller, document, view } = setup(t, new Document(current), baseline, current);
+  await controller.compare(document.api);
+  const ranges = [...view.decorations.values()].flat();
+  assert.equal(ranges.length, 1);
+  assert.equal(ranges[0]?.start.line, 7500);
 });
 
 test('background windows skip polling and focus restoration triggers a refresh', async t => {

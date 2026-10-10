@@ -15,7 +15,7 @@ export interface LineDiff {
   deleted: Deletion[];
 }
 
-/** Keep hover previews small, even for new files or very long lines. */
+/** Keep inline previews small, even for new files or very long lines. */
 export function previewHunk(hunk: Hunk): { text: string; truncated: boolean } {
   const rows = [`@@ -${hunk.oldStart + (hunk.oldLines.length ? 1 : 0)},${hunk.oldLines.length} +${hunk.newStart + (hunk.newLines.length ? 1 : 0)},${hunk.newLines.length} @@`];
   let truncated = false;
@@ -158,4 +158,10 @@ export function lineMarkers(diff: LineDiff): Marker[] {
   }
   for (const deletion of diff.deleted) at(deletion.line)[deletion.placement] += deletion.count;
   return [...markers.values()];
+}
+
+/** Leave uncommitted lines (including deletion anchors) to the native Git gutter. */
+export function branchMarkers(diff: LineDiff, ...localDiffs: LineDiff[]): Marker[] {
+  const localLines = new Set(localDiffs.flatMap(localDiff => lineMarkers(localDiff).map(marker => marker.line)));
+  return lineMarkers(diff).filter(marker => !localLines.has(marker.line));
 }

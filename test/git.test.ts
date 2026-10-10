@@ -80,6 +80,31 @@ test('staged, unstaged, unsaved and untracked content uses the same baseline', a
   assert.deepEqual(await service.baseline(snapshot, 'untracked.txt', 1024), { text: '', exists: false, bytes: 0 });
 });
 
+test('index reads follow staging, cache immutable text, and treat unusual filenames literally', async () => {
+  const { root, service } = await setup();
+  const file = 'index [literal]: name.txt';
+  await commitFile(root, file, 'committed\n');
+  const first = await service.index(root, file, 1024);
+  assert.equal(first.baseline.text, 'committed\n');
+  const run = service.git.run.bind(service.git);
+  let blobReads = 0;
+  service.git.run = async (directory, args, maxBuffer) => {
+    if (args[0] === 'cat-file' && args[1] === 'blob') blobReads++;
+    return run(directory, args, maxBuffer);
+  };
+  assert.equal((await service.index(root, file, 1024)).baseline, first.baseline);
+  assert.equal(blobReads, 0, 'cached index text is not reread on idle polls');
+  await writeFile(path.join(root, file), 'staged\n');
+  git(root, 'add', '--', file);
+  await writeFile(path.join(root, file), 'committed\n');
+  const staged = await service.index(root, file, 1024);
+  assert.notEqual(staged.key, first.key);
+  assert.equal(staged.baseline.text, 'staged\n', 'a reversed working-tree edit does not erase the staged change');
+  git(root, 'reset', '--', file);
+  assert.equal((await service.index(root, file, 1024)).key, first.key);
+  assert.equal((await service.index(root, 'untracked.txt', 1024)).baseline.exists, false);
+});
+
 test('ref updates and branch switches recalculate the merge base', async () => {
   const { root, repo, ancestor } = await setup();
   git(root, 'checkout', '-b', 'feature');
