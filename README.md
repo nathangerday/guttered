@@ -14,7 +14,9 @@ You need desktop VS Code, Git 2.30 or newer, and a trusted workspace. Guttered u
 
 The extension supports VS Code 1.95 and newer.
 
-Download [guttered-0.4.1.vsix](https://github.com/nathangerday/guttered/releases/download/v0.4.1/guttered-0.4.1.vsix), then run **Extensions: Install from VSIX…** in VS Code and select the file. Open a file in a Git repository to start comparing automatically.
+Install [Guttered from the Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=nathangerday.guttered), or search for `nathangerday.guttered` in VS Code's Extensions view. Open a file in a Git repository to start comparing automatically.
+
+If you installed an earlier GitHub VSIX, uninstall that copy before installing the Marketplace version. The publisher ID changed from `guttered` to `nathangerday`, so VS Code treats them as separate extensions. Your `guttered.*` settings still apply.
 
 To build the extension from this repository, use Node.js 22 or newer:
 

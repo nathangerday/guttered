@@ -59,7 +59,7 @@ export async function run(): Promise<void> {
   const working = staged.replace('unstaged-base', 'unstaged-feature');
   await writeFile(path.join(root, 'file.txt'), working);
 
-  const extension = vscode.extensions.getExtension<Controller>('guttered.guttered');
+  const extension = vscode.extensions.getExtension<Controller>('nathangerday.guttered');
   assert.ok(extension, 'Guttered is installed in the extension host');
   const controller = await extension.activate();
   markerHovers = new ChangeHover(controller);
