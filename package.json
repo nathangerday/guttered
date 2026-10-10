@@ -3,7 +3,7 @@
   "displayName": "Guttered",
   "icon": "assets/icon.png",
   "description": "Live gutter indicators for your branch's changes since its merge base, including unsaved edits.",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "publisher": "nathangerday",
   "license": "MIT",
   "repository": {
@@ -48,7 +48,8 @@
     "test": "tsx --test test/*.test.ts",
     "test:integration": "npm run build && node scripts/test-integration.mjs",
     "vscode:prepublish": "npm run check && npm run build",
-    "package": "vsce package --no-dependencies"
+    "package": "vsce package --no-dependencies",
+    "publish:marketplace": "vsce publish --no-dependencies"
   },
   "contributes": {
     "commands": [

@@ -2,11 +2,23 @@
 
 <img src="assets/icon.png" alt="Guttered logo" width="96" height="96">
 
-Guttered shows your branch's changes in the normal VS Code editor, including committed, staged, unstaged, and unsaved edits. It also marks new and untracked files that Git isn't ignoring.
+Guttered shows your branch's changes **since its merge base with the repository's default branch**, directly in the normal VS Code editor. Committed changes stay visible alongside staged, unstaged, and unsaved edits. New and untracked files that Git isn't ignoring are included.
 
-The comparison starts at a **merge base**: a common ancestor of your branch and the repository's default branch, selected by Git. Changes made only on the default branch after that point stay out of your indicators.
+![Branch-change markers and the changed-files tree in VS Code](assets/screenshots/branch-changes-dark.png)
 
-Added lines have soft green bars, modified lines have soft yellow bars, and deleted lines have soft red triangles on the neighboring line. Markers use 30% opacity by default, keeping native Git indicators more prominent on both dark and light themes. Markers sit in an 8 px inset before the text, leaving breakpoint clicks, line numbers, folding controls, and native Git markers available. Unchanged lines use the same inset to keep the code aligned. The overview ruler also shows the changes; text backgrounds stay unchanged.
+*Committed branch changes and an unsaved edit, with the changed-files tree in Source Control.*
+
+## Compare from where your branches diverged
+
+A **merge base** is a common ancestor that Git selects for your branch and the comparison reference. Guttered detects the repository's default branch automatically and uses its merge base with `HEAD` as the baseline.
+
+![Branches share commits A, B, and C, then main advances to D and E while the feature branch advances to F and G. Commit C is the merge base.](assets/merge-base.png)
+
+In this example, the default branch is `main`. The merge base is **C**, even though `main` has advanced to **E** and your feature branch is at **G**. Guttered compares the file at **C** with your **current editor contents**: the net changes from **F** and **G**, plus staged, unstaged, and unsaved edits. Changes made only in **D** and **E** stay out of the comparison.
+
+Committing your work keeps its branch markers visible. If `main` advances again, the baseline stays at **C** while the branches still share that same ancestor. After a merge, rebase, or branch switch, Guttered recalculates the merge base to follow the new history.
+
+VS Code's native Git markers show local changes relative to `HEAD` and the index. Guttered adds a view of the whole branch's net changes since the merge base, so you can keep track of work across multiple commits.
 
 ## Install
 
@@ -27,9 +39,15 @@ npm run package
 
 ## Use Guttered
 
+Added lines have soft green bars, modified lines have soft yellow bars, and deleted lines have soft red triangles on the neighboring line. Markers use 30% opacity by default, keeping native Git indicators more prominent on both dark and light themes. Markers sit in an 8 px inset before the text, leaving breakpoint clicks, line numbers, folding controls, and native Git markers available. Unchanged lines use the same inset to keep the code aligned. The overview ruler also shows the changes; text backgrounds stay unchanged.
+
 The status bar shows the selected reference, such as `origin/trunk (merge-base)`. Hover for the current branch, merge-base SHA, and comparison state. Click it to open the actions menu.
 
 Hover over a branch-change marker to preview the removed and added lines. Click **Open Diff with Merge Base** in the hover to open VS Code's diff view at that change, including unsaved edits. Large previews are shortened; the diff view shows the full comparison.
+
+![Hovering over a marker previews changes from the merge base, including an unsaved edit](assets/screenshots/marker-hover.png)
+
+*The preview compares the original threshold of 100 with the unsaved value of 60 and shows the removed handling-fee line.*
 
 Marker previews stay separate from code documentation. They require visible inlay hints and **Editor: Inlay Hints: Padding** turned off (VS Code's defaults). If hints are hidden or padded, the markers and **Guttered: Open Diff with Merge Base** command still work.
 
@@ -116,3 +134,24 @@ Desktop tests require a graphical session that can focus the test window. Headle
 The source files follow the work the extension performs: `git.ts` handles Git and its caches, `diff.ts` computes changes and restoration edits, `decorations.ts` draws markers, `hover.ts` previews individual changes, `files.ts` combines saved and unsaved file changes and builds their folder tree, `changedFiles.ts` manages the sidebar, `controller.ts` coordinates updates, `extension.ts` registers commands, and `config.ts` reads settings. The baseline cache is limited to 16 MiB and 256 entries. `diff` is the only runtime dependency and is bundled in the VSIX.
 
 Transparent PNGs are available at 1254×1254 (`assets/logo.png`), 256×256 (`assets/icon.png`), and 128×128 (`assets/icon-128.png`). The VSIX includes only `assets/icon.png`.
+
+## Publishing
+
+On the machine that will publish releases, authenticate once with the Microsoft account that owns the publisher. Create an Azure DevOps personal access token with **Organization: All accessible organizations** and **Custom defined → Show all scopes → Marketplace → Manage**. Follow the [VS Code publishing guide](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#get-a-personal-access-token).
+
+```sh
+npx vsce login nathangerday
+npx vsce verify-pat nathangerday
+```
+
+Paste the token into the masked login prompt. VSCE saves the credential outside this repository. Microsoft retires global personal access tokens on December 1, 2026; after that, use the guide's Microsoft Entra authentication workflow and pass `--azure-credential` to the publish command.
+
+For a new release, choose its version, update the changelog, run the tests, and commit the release changes before publishing. For example, to prepare the next patch version:
+
+```sh
+npm version patch --no-git-tag-version
+# Update CHANGELOG.md, test, and commit before the next command.
+npm run publish:marketplace
+```
+
+The publish command checks TypeScript, builds the extension, and uploads it to the Marketplace. Every release needs a version that has not already been published.

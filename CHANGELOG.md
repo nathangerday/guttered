@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2
+
+- Explain merge-base comparison with a branch-history diagram and screenshots of the markers, changed-files tree, and hover preview.
+- Add a Marketplace publishing command and document CLI authentication and release steps.
+
 ## 0.4.1
 
 - Fix the invisible Toggle On/Off button in the Branch Changes toolbar by using a supported VS Code icon.
