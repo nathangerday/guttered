@@ -17,6 +17,7 @@ export interface Snapshot {
   key: string;
 }
 export interface Baseline { text: string; exists: boolean; bytes: number }
+export interface Branch { name: string; ref: string }
 interface BaseCandidate { ref: string; label: string }
 
 class GitError extends Error {
@@ -104,6 +105,18 @@ export class Repository {
 
   constructor(readonly root: string, private readonly git: Git) {}
 
+  async branches(): Promise<Branch[]> {
+    const output = await this.git.text(this.root, [
+      'for-each-ref', '--sort=refname', '--format=%(refname)%09%(symref)', 'refs/heads/', 'refs/remotes/',
+    ]);
+    return output.split('\n').flatMap(line => {
+      const [ref, symbolic] = line.split('\t');
+      // Remote HEAD aliases are not branches. Keep full refs to avoid ambiguous
+      // names when a tag or local branch shadows a remote-tracking branch.
+      return ref && !symbolic ? [{ name: ref.replace(/^refs\/(?:heads|remotes)\//, ''), ref }] : [];
+    });
+  }
+
   snapshot(reference: string, refresh = false): Promise<Snapshot> {
     // Automatic refreshes respect failure backoff. Manual refresh clears these
     // caches explicitly, while concurrent readers always share the running task.
@@ -166,7 +179,7 @@ export class Repository {
     const [head, branch, candidates] = await Promise.all([
       this.resolve('HEAD'),
       this.git.optional(this.root, ['symbolic-ref', '--quiet', '--short', 'HEAD']),
-      reference ? Promise.resolve([{ ref: reference, label: reference }]) : this.defaultCandidates(),
+      reference ? Promise.resolve([{ ref: reference, label: reference.replace(/^refs\/(?:heads|remotes)\//, '') }]) : this.defaultCandidates(),
     ]);
     if (!head) throw new Error('Comparison inactive: this repository has no HEAD commit yet.');
     let baseRef: string | undefined;

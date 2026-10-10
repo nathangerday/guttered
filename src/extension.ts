@@ -64,16 +64,38 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
     const uri = activeUri?.scheme === 'file' ? activeUri : vscode.workspace.workspaceFolders?.[0]?.uri;
     const folder = uri ? vscode.workspace.getWorkspaceFolder(uri) : undefined;
     const scope = folder ? `workspace folder "${folder.name}"` : 'user settings, affecting all workspaces';
-    const value = await vscode.window.showInputBox({
+    const settings = vscode.workspace.getConfiguration('guttered', uri);
+    const current = settings.get<string>('baseReference', '').trim();
+    // locate expects a file path; a placeholder also works with no open editor.
+    const file = activeUri?.scheme === 'file' ? activeUri.fsPath : uri && path.join(uri.fsPath, '.guttered');
+    const repository = file ? (await controller.git.locate(file))?.repository : undefined;
+    const branches = repository ? await repository.branches() : [];
+    const items: (vscode.QuickPickItem & { reference?: string; custom?: boolean })[] = [
+      { label: 'Default branch (automatic)', description: current ? undefined : 'Selected', detail: 'Merge base with the repository’s default branch', reference: '' },
+      { label: 'Branches', kind: vscode.QuickPickItemKind.Separator },
+      ...branches.map(branch => ({
+        label: branch.name,
+        description: `${branch.ref.startsWith('refs/remotes/') ? 'Remote branch' : 'Local branch'}${current === branch.ref || current === branch.name ? ' · selected' : ''}`,
+        reference: branch.ref,
+      })),
+      { label: 'Other reference', kind: vscode.QuickPickItemKind.Separator },
+      { label: 'Enter another Git reference…', description: 'Tag, commit, or other ref', custom: true },
+    ];
+    const selected = await vscode.window.showQuickPick(items, {
+      title: 'Guttered: Base Reference',
+      placeHolder: `Type to filter branches. Applies to ${scope}.`,
+    });
+    if (!selected) return;
+    const value = selected.custom ? await vscode.window.showInputBox({
       title: 'Guttered: Base Reference',
       prompt: `Applies to ${scope}. Leave empty to detect the default branch; comparisons always use the merge base.`,
       placeHolder: 'Automatic (remote default branch)',
-      value: vscode.workspace.getConfiguration('guttered', uri).get<string>('baseReference', ''),
+      value: current,
       validateInput: input => input.trim().startsWith('-') || /\s/.test(input.trim()) ? 'Use a Git reference without whitespace or a leading hyphen.' : undefined,
-    });
+    }) : selected.reference;
     if (value === undefined) return;
     const target = folder ? vscode.ConfigurationTarget.WorkspaceFolder : vscode.ConfigurationTarget.Global;
-    await vscode.workspace.getConfiguration('guttered', uri).update('baseReference', value.trim(), target);
+    await settings.update('baseReference', value.trim(), target);
   });
   command('openDiff', async (targetUri, targetLine) => {
     if (targetUri !== undefined) {

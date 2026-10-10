@@ -21,6 +21,31 @@ async function setup() {
   return { root, service, ancestor, repo: located.repository };
 }
 
+test('branch choices include local and remote refs, exclude aliases and tags, and avoid ambiguous names', async () => {
+  const { root, repo, ancestor } = await setup();
+  git(root, 'checkout', '-b', 'feature/topic');
+  const feature = await commitFile(root, 'feature.txt', 'feature\n');
+  git(root, 'branch', 'origin/trunk');
+  git(root, 'tag', 'origin/trunk');
+  git(root, 'tag', 'release-tag');
+  git(root, 'update-ref', 'refs/remotes/upstream/release', feature);
+  const branches = await repo.branches();
+  assert.deepEqual(branches, [
+    { name: 'feature/topic', ref: 'refs/heads/feature/topic' },
+    { name: 'origin/trunk', ref: 'refs/heads/origin/trunk' },
+    { name: 'trunk', ref: 'refs/heads/trunk' },
+    { name: 'origin/trunk', ref: 'refs/remotes/origin/trunk' },
+    { name: 'upstream/release', ref: 'refs/remotes/upstream/release' },
+  ]);
+  const remote = await repo.snapshot(branches[3]!.ref);
+  assert.equal(remote.mergeBase, ancestor, 'a selected remote branch cannot resolve to the same-named local branch or tag');
+  assert.equal(remote.baseRef, 'origin/trunk');
+  const local = await repo.snapshot(branches[1]!.ref);
+  assert.equal(local.mergeBase, feature);
+  git(root, 'branch', 'new-branch');
+  assert.ok((await repo.branches()).some(branch => branch.name === 'new-branch'), 'reopening the picker reads fresh branch refs');
+});
+
 test('default branch detection does not assume master/main, and excludes upstream-only changes', async () => {
   const { root, service, ancestor, repo } = await setup();
   git(root, 'checkout', '-b', 'feature');

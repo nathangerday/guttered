@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
+- Filter available local and remote-tracking branches when choosing the comparison reference, with the automatic default branch first.
 - Preview merge-base changes by hovering over a marker, with a link to open VS Code's diff view at that change.
 - Keep marker previews separate from language documentation, without changing the text inset. Previews require visible inlay hints with padding off.
 

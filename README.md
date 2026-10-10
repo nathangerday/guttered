@@ -14,14 +14,14 @@ You need desktop VS Code, Git 2.30 or newer, and a trusted workspace. Guttered u
 
 The extension supports VS Code 1.95 and newer.
 
+Download [guttered-0.3.0.vsix](https://github.com/nathangerday/guttered/releases/download/v0.3.0/guttered-0.3.0.vsix), then run **Extensions: Install from VSIX…** in VS Code and select the file. Open a file in a Git repository to start comparing automatically.
+
 To build the extension from this repository, use Node.js 22 or newer:
 
 ```sh
 npm ci
 npm run package
 ```
-
-In VS Code, run **Extensions: Install from VSIX…** and select `guttered-0.2.0.vsix`. Open a file in a Git repository to start comparing automatically.
 
 ## Use Guttered
 
@@ -36,12 +36,12 @@ A *hunk* is a group of adjacent changed lines. The available actions are:
 - **Open Diff with Merge Base** compares the merge-base version with your current editor contents, including unsaved edits.
 - **Go to Next/Previous Change** moves between hunks, wrapping at either end of the file.
 - **Restore Change from Merge Base** restores the hunk at the cursor. Put the cursor on a line with a deletion triangle to bring deleted lines back. Restoration edits the buffer and supports normal **Undo**; it does not save or stage. It can reverse committed branch changes in your working file.
-- **Change Base Reference** sets an optional comparison reference. Leave it empty to return to automatic default-branch detection.
+- **Change Base Reference** lists local and remote-tracking branches from the file's repository. Type to filter them, or choose **Default branch (automatic)** at the top to return to the default branch. **Enter another Git reference…** accepts a tag, commit, or other reference. Every choice compares from its merge base with HEAD.
 - **Refresh Comparison** checks again and clears cached failures. Normal operation is automatic.
 
 All actions appear in the Command Palette and status bar menu. The **Guttered** editor context menu contains diff, navigation, and restore. You can assign shortcuts in VS Code's Keyboard Shortcuts editor; Guttered doesn't install default bindings.
 
-Base-reference overrides apply to the current workspace folder, so repositories nested in that folder share the override. For a file outside every workspace folder, the command updates user settings and affects all workspaces. The input prompt states which scope it will change.
+Base-reference overrides apply to the current workspace folder, so repositories nested in that folder share the override. For a file outside every workspace folder, the command updates user settings and affects all workspaces. The picker states which scope it will change. It lists branches already available locally; it does not fetch.
 
 ## How comparison works
 
