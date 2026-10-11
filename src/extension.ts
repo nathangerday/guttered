@@ -2,11 +2,26 @@ import * as vscode from 'vscode';
 import path from 'node:path';
 import { configuration } from './config';
 import { Controller, type Comparison, type GitAPI, type GitExtension } from './controller';
-import { hunkAtLine, hunkLine, minimalTextChange, restoreHunk } from './diff';
+import { hunkAtLine, hunkLine, lineMarkers, minimalTextChange, restoreHunk } from './diff';
 import { ChangeHover } from './hover';
 import { ChangedFiles } from './changedFiles';
 
 const baselineScheme = 'guttered-base';
+
+interface Target { uri: string; line?: number }
+const isLine = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+
+// Hover links pass a URI string and a zero-based line. The editor context menu
+// passes the document URI; the gutter context menu passes a one-based line.
+function commandTarget(args: unknown[]): Target | undefined {
+  const [first, second] = args;
+  if (first === undefined) return;
+  if (first instanceof vscode.Uri) return { uri: first.toString() };
+  if (typeof first === 'string' && isLine(second)) return { uri: first, line: second };
+  const { uri, lineNumber } = (first ?? {}) as { uri?: unknown; lineNumber?: unknown };
+  if (uri instanceof vscode.Uri && isLine(lineNumber) && lineNumber > 0) return { uri: uri.toString(), line: lineNumber - 1 };
+  throw new Error('Invalid command target.');
+}
 
 export async function activate(context: vscode.ExtensionContext): Promise<Controller> {
   let gitApi: GitAPI | undefined;
@@ -23,6 +38,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
   const changedFiles = new ChangedFiles(controller);
   context.subscriptions.push(changedFiles);
   context.subscriptions.push(vscode.languages.registerInlayHintsProvider({ scheme: 'file' }, new ChangeHover(controller)));
+  // The gutter context menu offers actions on marked lines. Right-clicking the
+  // gutter doesn't focus its editor, so include lines from every visible editor.
+  let markedLines: string | undefined;
+  const updateMarkedLines = () => {
+    const lines = new Set<number>();
+    for (const editor of vscode.window.visibleTextEditors) {
+      const comparison = controller.getComparison(editor.document.uri);
+      for (const marker of comparison ? lineMarkers(comparison.diff) : []) lines.add(marker.line + 1);
+    }
+    const value = [...lines].sort((a, b) => a - b);
+    if (value.join() === markedLines) return;
+    markedLines = value.join();
+    void vscode.commands.executeCommand('setContext', 'guttered.markedLines', value);
+  };
+  context.subscriptions.push(controller.onDidChangeComparison(updateMarkedLines), vscode.window.onDidChangeVisibleTextEditors(updateMarkedLines));
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(baselineScheme, {
     async provideTextDocumentContent(uri) {
       const { root, mergeBase, file, maxBytes } = JSON.parse(uri.query) as { root: string; mergeBase: string; file: string; maxBytes: number };
@@ -50,19 +80,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
       }
     }));
   };
-  const withComparison = async (action: (editor: vscode.TextEditor, comparison: Comparison) => unknown) => {
+  // Menus and hover links name their own document, which may be in an unfocused split.
+  const targetEditor = (target: Target | undefined) => {
+    const active = vscode.window.activeTextEditor;
+    if (!target || active?.document.uri.toString() === target.uri) return { editor: active, document: active?.document };
+    const editor = vscode.window.visibleTextEditors.find(view => view.document.uri.toString() === target.uri);
+    return { editor, document: editor?.document ?? vscode.workspace.textDocuments.find(document => document.uri.toString() === target.uri) };
+  };
+  const withComparison = async (target: Target | undefined, action: (editor: vscode.TextEditor, comparison: Comparison) => unknown) => {
+    const { editor: shown, document } = targetEditor(target);
+    if (!document || document.isClosed || document.uri.scheme !== 'file') return;
+    // A target line refers to the text when the command ran, so record its
+    // version before focusing. Never act after the user has edited or switched.
+    const version = document.version;
+    if (vscode.window.activeTextEditor?.document !== document) await vscode.window.showTextDocument(document, shown?.viewColumn);
     const editor = vscode.window.activeTextEditor;
-    if (!editor || editor.document.uri.scheme !== 'file') return;
-    const version = editor.document.version;
-    // A visibility/configuration event may invalidate work without changing text.
-    // Retry that case, but never apply an action after the user has edited or switched.
+    if (editor?.document !== document || document.version !== version) return;
+    // A visibility/configuration event may invalidate work without changing text, so retry that case.
     for (let attempt = 0; attempt < 3; attempt++) {
-      const comparison = await controller.compare(editor.document, true);
-      if (vscode.window.activeTextEditor !== editor || editor.document.version !== version) return;
+      const comparison = await controller.compare(document, true);
+      if (vscode.window.activeTextEditor !== editor || document.version !== version) return;
       if (comparison) return action(editor, comparison);
-      if (controller.reason(editor.document.uri)) break;
+      if (controller.reason(document.uri)) break;
     }
-    void vscode.window.showInformationMessage(controller.reason(editor.document.uri) ?? 'Guttered: the comparison changed. Please try again.');
+    void vscode.window.showInformationMessage(controller.reason(document.uri) ?? 'Guttered: the comparison changed. Please try again.');
   };
 
   command('refresh', () => controller.refresh(true));
@@ -111,32 +152,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
     const target = folder ? vscode.ConfigurationTarget.WorkspaceFolder : vscode.ConfigurationTarget.Global;
     await settings.update('baseReference', value.trim(), target);
   });
-  command('openDiff', async (targetUri, targetLine) => {
-    if (targetUri !== undefined) {
-      if (typeof targetUri !== 'string' || typeof targetLine !== 'number' || !Number.isSafeInteger(targetLine) || targetLine < 0) {
-        throw new Error('Invalid diff target.');
-      }
-      // Hover links target their own document, even if focus has moved to a split editor.
-      const document = vscode.workspace.textDocuments.find(document => document.uri.scheme === 'file' && document.uri.toString() === targetUri);
-      if (!document || document.isClosed) return;
-      await vscode.window.showTextDocument(document);
-      if (vscode.window.activeTextEditor?.document !== document) return;
-    }
-    return withComparison(async (editor, comparison) => {
+  command('openDiff', async (...args) => {
+    const target = commandTarget(args);
+    return withComparison(target, async (editor, comparison) => {
       const { snapshot, path: file } = comparison;
       const uri = vscode.Uri.from({
         scheme: baselineScheme, path: `/${file}`,
         query: JSON.stringify({ root: snapshot.root, mergeBase: snapshot.mergeBase, file, maxBytes: configuration(editor.document.uri).maxBytes }),
       });
-      const selection = typeof targetLine === 'number'
-        ? new vscode.Range(Math.min(targetLine, editor.document.lineCount - 1), 0, Math.min(targetLine, editor.document.lineCount - 1), 0)
-        : undefined;
+      const line = target?.line === undefined ? undefined : Math.min(target.line, editor.document.lineCount - 1);
+      const selection = line === undefined ? undefined : new vscode.Range(line, 0, line, 0);
       await vscode.commands.executeCommand('vscode.diff', uri, editor.document.uri,
         `${path.basename(file)} · ${snapshot.baseRef} merge-base ${snapshot.mergeBase.slice(0, 8)}`, { preview: true, selection });
     });
   });
   for (const [name, direction] of [['nextChange', 1], ['previousChange', -1]] as const) {
-    command(name, () => withComparison((editor, comparison) => {
+    command(name, () => withComparison(undefined, (editor, comparison) => {
       const targets = [...new Set(comparison.diff.hunks.map(hunk => hunkLine(hunk, editor.document.lineCount)))];
       if (!targets.length) return;
       const current = editor.selection.active.line;
@@ -146,21 +177,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
       editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
     }));
   }
-  command('restoreChange', () => withComparison(async (editor, comparison) => {
-    const document = editor.document;
-    if (document.version !== comparison.version) return;
-    const hunk = hunkAtLine(comparison.diff.hunks, editor.selection.active.line, document.lineCount);
-    if (!hunk) {
-      void vscode.window.showInformationMessage('Guttered: place the cursor on a changed line or deletion marker first.');
-      return;
-    }
-    const current = document.getText();
-    const replacement = restoreHunk(current, hunk, document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n');
-    const change = minimalTextChange(current, replacement);
-    const range = new vscode.Range(document.positionAt(change.start), document.positionAt(change.end));
-    await editor.edit(edit => edit.replace(range, change.text), { undoStopBefore: true, undoStopAfter: true });
-    await controller.compare(document);
-  }));
+  command('restoreChange', async (...args) => {
+    const target = commandTarget(args);
+    return withComparison(target, async (editor, comparison) => {
+      const document = editor.document;
+      if (document.version !== comparison.version) return;
+      const line = target?.line ?? editor.selection.active.line;
+      const hunk = hunkAtLine(comparison.diff.hunks, line, document.lineCount);
+      if (!hunk) {
+        void vscode.window.showInformationMessage(target?.line === undefined
+          ? 'Guttered: place the cursor on a changed line or deletion marker first.'
+          : `Guttered: line ${line + 1} has no change from the merge base.`);
+        return;
+      }
+      const current = document.getText();
+      const replacement = restoreHunk(current, hunk, document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n');
+      const change = minimalTextChange(current, replacement);
+      const range = new vscode.Range(document.positionAt(change.start), document.positionAt(change.end));
+      await editor.edit(edit => edit.replace(range, change.text), { undoStopBefore: true, undoStopAfter: true });
+      await controller.compare(document);
+    });
+  });
   command('actions', async () => {
     const actions = [
       { label: controller.enabled ? '$(circle-slash) Disable Guttered' : '$(check) Enable Guttered', command: 'toggle' },

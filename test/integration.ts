@@ -183,6 +183,27 @@ export async function run(): Promise<void> {
   editor = await vscode.window.showTextDocument(document);
   console.log('PASS: merge-base hover includes unsaved content and opens the native diff at its own change');
 
+  // The gutter context menu passes a one-based line, and its editor may be unfocused.
+  await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(path.join(root, 'deletions.txt')));
+  await vscode.commands.executeCommand('guttered.openDiff', { lineNumber: 6, uri: document.uri });
+  await waitFor(() => vscode.window.activeTextEditor?.document === document && vscode.window.activeTextEditor.selection.active.line === 5,
+    'gutter menu diff opens at the clicked line');
+  editor = await vscode.window.showTextDocument(document);
+  editor.selection = new vscode.Selection(0, 0, 0, 0);
+  await vscode.commands.executeCommand('guttered.restoreChange', { lineNumber: 4, uri: document.uri });
+  assert.equal(document.lineAt(3).text, 'staged-base', 'gutter menu restores the clicked line, not the cursor line');
+  assert.equal(document.lineAt(5).text, 'unstaged-feature');
+  await vscode.commands.executeCommand('undo');
+  assert.equal(document.lineAt(3).text, 'staged-feature');
+  // The editor context menu passes the document URI and uses the cursor.
+  await vscode.commands.executeCommand('guttered.openDiff', document.uri);
+  await waitFor(() => {
+    const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+    return input instanceof vscode.TabInputTextDiff && input.original.scheme === 'guttered-base';
+  }, 'editor context menu opens the diff');
+  editor = await vscode.window.showTextDocument(document);
+  console.log('PASS: gutter and editor context menus act on their own document and line');
+
   const deletionDocument = await vscode.workspace.openTextDocument(path.join(root, 'deletions.txt'));
   const deletionEditor = await vscode.window.showTextDocument(deletionDocument);
   const deletionRange = () => new vscode.Range(0, 0, deletionDocument.lineCount, 0);
@@ -318,6 +339,11 @@ export async function run(): Promise<void> {
   await config.update('gutter', false, vscode.ConfigurationTarget.WorkspaceFolder);
   assert.equal(await changeHover(newDocument, 0), undefined);
   await config.update('gutter', undefined, vscode.ConfigurationTarget.WorkspaceFolder);
+  assert.equal(config.inspect('gutterPlacement')?.defaultValue, 'glyphMargin');
+  await config.update('gutterPlacement', 'glyphMargin', vscode.ConfigurationTarget.WorkspaceFolder);
+  await waitFor(() => !!controller.getComparison(newDocument.uri), 'glyph-margin placement keeps comparing');
+  assert.equal(await changeHover(newDocument, 0), undefined, 'glyph-margin markers have no hover target');
+  await config.update('gutterPlacement', undefined, vscode.ConfigurationTarget.WorkspaceFolder);
   await config.update('maxFileSizeKB', 1, vscode.ConfigurationTarget.WorkspaceFolder);
   await newEditor.edit(edit => edit.insert(new vscode.Position(0, 0), 'x'.repeat(2048)));
   await waitFor(() => /size/i.test(controller.reason(newDocument.uri) ?? ''), 'large file limit is applied');

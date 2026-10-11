@@ -39,17 +39,27 @@ npm run package
 
 ## Use Guttered
 
-Added lines have soft green bars, modified lines have soft yellow bars, and deleted lines have soft red triangles on the neighboring line. Markers use 30% opacity by default, keeping native Git indicators more prominent on both dark and light themes. Markers sit in an 8 px inset before the text, leaving breakpoint clicks, line numbers, folding controls, and native Git markers available. Unchanged lines use the same inset to keep the code aligned. The overview ruler also shows the changes; text backgrounds stay unchanged.
+Added lines have soft green bars, modified lines have soft yellow bars, and deleted lines have soft red triangles on the neighboring line. Markers use 30% opacity by default, keeping native Git indicators more prominent on both dark and light themes. Markers sit in the glyph margin alongside breakpoints, so the text starts at its usual position. The overview ruler also shows the changes; text backgrounds stay unchanged. Right-click the line number or glyph margin of a marked line for Guttered's actions at that line.
+
+The glyph margin has trade-offs set by VS Code:
+
+- Clicking the glyph margin of a changed line doesn't add a breakpoint. Right-click the gutter and choose **Add Breakpoint**, or press F9. Clicking an existing breakpoint still removes it.
+- A breakpoint on a changed line needs a second glyph column, so the margin widens while it's set.
+- Marker previews are unavailable; use **Open Diff with Merge Base** from the gutter menu instead.
+- Another extension's gutter icon on the same changed line, such as a bookmark, shares the marker's slot, and VS Code shows only one of them.
+- Markers need **Editor: Glyph Margin**, which is on by default.
+
+To keep breakpoint clicks free and preview changes on hover, set **Guttered: Gutter Placement** (`guttered.gutterPlacement`) to `inset`. Markers then sit in an 8 px inset before the text, leaving breakpoint clicks, line numbers, folding controls, and native Git markers available. Unchanged lines use the same inset to keep the code aligned.
 
 The status bar shows the selected reference, such as `origin/trunk (merge-base)`. Hover for the current branch, merge-base SHA, and comparison state. Click it to open the actions menu.
 
-Hover over a branch-change marker to preview the removed and added lines. Click **Open Diff with Merge Base** in the hover to open VS Code's diff view at that change, including unsaved edits. Large previews are shortened; the diff view shows the full comparison.
+With the inset placement, hover over a branch-change marker to preview the removed and added lines. Click **Open Diff with Merge Base** in the hover to open VS Code's diff view at that change, including unsaved edits. Large previews are shortened; the diff view shows the full comparison.
 
 ![Hovering over a marker previews changes from the merge base, including an unsaved edit](assets/screenshots/marker-hover.png)
 
 *The preview compares the original threshold of 100 with the unsaved value of 60 and shows the removed handling-fee line.*
 
-Marker previews stay separate from code documentation. They require visible inlay hints and **Editor: Inlay Hints: Padding** turned off (VS Code's defaults). If hints are hidden or padded, the markers and **Guttered: Open Diff with Merge Base** command still work.
+Marker previews stay separate from code documentation. They require the inset placement, visible inlay hints, and **Editor: Inlay Hints: Padding** turned off (VS Code's defaults). If hints are hidden or padded, the markers and **Guttered: Open Diff with Merge Base** command still work.
 
 **Guttered: Toggle On/Off** disables or enables Guttered across the current workspace. Turning it off removes markers and previews, clears the changed-files view, and stops comparison updates. The choice is remembered for that workspace; enabling Guttered again preserves your per-folder settings and unsaved edits.
 
@@ -63,11 +73,11 @@ A *hunk* is a group of adjacent changed lines. The available actions are:
 - **Show Changed Files** opens the branch-changes tree in Source Control.
 - **Open Diff with Merge Base** compares the merge-base version with your current editor contents, including unsaved edits.
 - **Go to Next/Previous Change** moves between hunks, wrapping at either end of the file.
-- **Restore Change from Merge Base** restores the hunk at the cursor. Put the cursor on a line with a deletion triangle to bring deleted lines back. Restoration edits the buffer and supports normal **Undo**; it does not save or stage. It can reverse committed branch changes in your working file.
+- **Restore Change from Merge Base** restores the hunk at the cursor, or at the line you right-clicked in the gutter. Put the cursor on a line with a deletion triangle to bring deleted lines back. Restoration edits the buffer and supports normal **Undo**; it does not save or stage. It can reverse committed branch changes in your working file.
 - **Change Base Reference** lists local and remote-tracking branches from the file's repository. Type to filter them, or choose **Default branch (automatic)** at the top to return to the default branch. **Enter another Git reference…** accepts a tag, commit, or other reference. Every choice compares from its merge base with HEAD.
 - **Refresh Comparison** checks again and clears cached failures. Normal operation is automatic.
 
-All actions appear in the Command Palette and status bar menu. The **Guttered** editor context menu contains diff, navigation, and restore. You can assign shortcuts in VS Code's Keyboard Shortcuts editor; Guttered doesn't install default bindings.
+All actions appear in the Command Palette and status bar menu. The **Guttered** editor context menu contains diff, navigation, and restore. Right-click the line number or glyph margin of a changed line for **Open Diff with Merge Base** and **Restore Change from Merge Base** at that line, below VS Code's breakpoint actions. You can assign shortcuts in VS Code's Keyboard Shortcuts editor; Guttered doesn't install default bindings.
 
 Base-reference overrides apply to the current workspace folder, so repositories nested in that folder share the override. For a file outside every workspace folder, the command updates user settings and affects all workspaces. The picker states which scope it will change. It lists branches already available locally; it does not fetch.
 
@@ -91,7 +101,8 @@ All settings support workspace-folder overrides.
 | `guttered.baseReference` | `""` | Detect the remote default branch; optionally use an explicit reference |
 | `guttered.debounceMs` | `250` | Delay after typing, in milliseconds |
 | `guttered.maxFileSizeKB` | `1024` | Maximum size of either file, in KiB |
-| `guttered.gutter` | `true` | Show markers and the small inset before the text |
+| `guttered.gutter` | `true` | Show markers beside the code |
+| `guttered.gutterPlacement` | `glyphMargin` | Place markers in the glyph margin, or in an `inset` before the text |
 | `guttered.overviewRuler` | `true` | Show overview ruler markers |
 | `guttered.opacity` | `0.3` | Marker opacity, from invisible (`0`) to fully opaque (`1`) |
 | `guttered.colors.added` | `#4CAF50` | Added line color |

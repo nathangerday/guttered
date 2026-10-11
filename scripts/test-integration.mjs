@@ -20,6 +20,8 @@ await writeFile(path.join(userData, 'User', 'settings.json'), JSON.stringify({
   'chat.disableAIFeatures': true,
   'gitlens.showWhatsNewAfterUpgrades': false,
   'extensions.autoUpdate': false,
+  // Marker previews need the inset; the configuration test also covers the glyph margin.
+  'guttered.gutterPlacement': 'inset',
   ...(withoutBuiltInGit ? { 'git.enabled': false, 'git.path': ['/missing/guttered-test-git'] } : {}),
 }));
 try {

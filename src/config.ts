@@ -12,6 +12,7 @@ export function configuration(uri: vscode.Uri) {
     debounceMs: Math.max(50, Math.min(2000, config.get<number>('debounceMs', 250))),
     maxBytes: Math.max(1, Math.min(10240, config.get<number>('maxFileSizeKB', 1024))) * 1024,
     gutter: config.get<boolean>('gutter', true),
+    gutterPlacement: config.get<string>('gutterPlacement', 'glyphMargin') === 'inset' ? 'inset' as const : 'glyphMargin' as const,
     overviewRuler: config.get<boolean>('overviewRuler', true),
     opacity: Math.max(0, Math.min(1, config.get<number>('opacity', 0.3))),
     added: color('added', '#4CAF50'),

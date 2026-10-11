@@ -3,7 +3,7 @@
   "displayName": "Guttered",
   "icon": "assets/icon.png",
   "description": "Live gutter indicators for your branch's changes since its merge base, including unsaved edits.",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "publisher": "nathangerday",
   "license": "MIT",
   "repository": {
@@ -122,6 +122,18 @@
           "group": "navigation@3"
         }
       ],
+      "editor/lineNumber/context": [
+        {
+          "command": "guttered.openDiff",
+          "when": "editorLineNumber in guttered.markedLines && resourceScheme == file",
+          "group": "9_guttered@1"
+        },
+        {
+          "command": "guttered.restoreChange",
+          "when": "editorLineNumber in guttered.markedLines && resourceScheme == file",
+          "group": "9_guttered@2"
+        }
+      ],
       "editor/context": [
         {
           "submenu": "guttered.context",
@@ -189,7 +201,21 @@
           "type": "boolean",
           "default": true,
           "scope": "resource",
-          "description": "Show change markers in a small inset before the text, leaving breakpoint and folding controls free. Overview markers and actions remain available when disabled."
+          "markdownDescription": "Show change markers beside the code, placed by `#guttered.gutterPlacement#`. Overview markers and actions remain available when disabled."
+        },
+        "guttered.gutterPlacement": {
+          "type": "string",
+          "default": "glyphMargin",
+          "enum": [
+            "glyphMargin",
+            "inset"
+          ],
+          "enumDescriptions": [
+            "The glyph margin, beside breakpoints. Clicking a changed line there doesn't add a breakpoint; right-click the gutter or press F9 instead. Marker previews are unavailable.",
+            "A small inset before the text. Breakpoint clicks and other gutter controls stay free, and hovering a marker previews the change."
+          ],
+          "scope": "resource",
+          "description": "Where change markers appear. Right-click a marked line's number or glyph margin for Guttered actions in either placement."
         },
         "guttered.overviewRuler": {
           "type": "boolean",

@@ -5,8 +5,9 @@ import { hunkLine, previewHunk } from './diff';
 
 function previewsEnabled(uri: vscode.Uri): boolean {
   const config = configuration(uri);
+  // The hint sits on the inset marker; glyph-margin markers have no hover target.
   // Native hint padding would turn the invisible target into a visible pill.
-  return config.enabled && config.gutter
+  return config.enabled && config.gutter && config.gutterPlacement === 'inset'
     && !vscode.workspace.getConfiguration('editor', uri).get<boolean>('inlayHints.padding', false);
 }
 

@@ -2,24 +2,38 @@ import * as vscode from 'vscode';
 import type { Configuration } from './config';
 import { lineMarkers, type LineDiff, type Marker } from './diff';
 
+function svgUri(svg: string): vscode.Uri {
+  return vscode.Uri.parse(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
+}
+
 export class Decorations implements vscode.Disposable {
   private readonly types = new Map<string, vscode.TextEditorDecorationType>();
   private readonly applied = new Map<vscode.TextEditor, { types: Set<vscode.TextEditorDecorationType>; diff: LineDiff | undefined; version: number }>();
 
   private type(marker: Marker | undefined, config: Configuration, overlay = false): vscode.TextEditorDecorationType {
-    const key = JSON.stringify([overlay, config.gutter, config.overviewRuler, config.opacity, config.added, config.modified, config.deleted, marker?.change, !!marker?.before, !!marker?.after]);
+    const key = JSON.stringify([overlay, config.gutter, config.gutterPlacement, config.overviewRuler, config.opacity, config.added, config.modified, config.deleted, marker?.change, !!marker?.before, !!marker?.after]);
     let type = this.types.get(key);
     if (!type) {
+      const inset = config.gutter && config.gutterPlacement === 'inset';
+      const glyph = config.gutter && config.gutterPlacement === 'glyphMargin';
       const before = marker?.before ? `<path fill="${config.deleted}" d="M0 0h7L0 5z"/>` : '';
       const after = marker?.after ? `<path fill="${config.deleted}" d="M0 16h7L0 11z"/>` : '';
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="16" viewBox="0 0 8 16" preserveAspectRatio="none" opacity="${config.opacity}">${before}${after}</svg>`;
+      // Without a viewBox, units are pixels and percentages follow the glyph's
+      // size, which tracks the line height. Bars join on adjacent lines and sit
+      // centered where breakpoints appear.
+      const bar = marker?.change ? `<rect width="3" height="100%" fill="${config[marker.change]}"/>` : '';
+      const below = marker?.after ? `<svg y="100%" overflow="visible"><path fill="${config.deleted}" d="M0 0h7L0-5z"/></svg>` : '';
+      const glyphSvg = `<svg xmlns="http://www.w3.org/2000/svg" opacity="${config.opacity}"><svg x="50%" overflow="visible"><g transform="translate(-1.5)">${bar}${before}${below}</g></svg></svg>`;
       const alpha = Math.round(config.opacity * 255).toString(16).padStart(2, '0');
       type = vscode.window.createTextEditorDecorationType({
         // Whole-line anchoring puts the inset before inlay hints, so carets stay
         // at the text edge. Keep the arrow overlay anchored to column zero.
-        isWholeLine: !overlay,
+        // Whole-line glyphs repeat on wrapped rows: bars span them, but a
+        // deletion glyph stays on the row at its boundary.
+        isWholeLine: !overlay && !(glyph && (before || after)),
         // Keep the breakpoint gutter free with a 3 px bar and 5 px gap before text.
-        ...(config.gutter && !overlay ? {
+        ...(inset && !overlay ? {
           before: {
             // A zero-width space keeps the attachment on the text baseline;
             // 1lh fills the editor's line height, joining adjacent bars.
@@ -27,16 +41,19 @@ export class Decorations implements vscode.Disposable {
             backgroundColor: marker?.change ? `${config[marker.change]}${alpha}` : undefined,
           },
         } : {}),
-        ...(config.gutter && overlay ? {
+        ...(inset && overlay ? {
           // Draw deletion arrows over the same inset without adding width.
           // This attachment also keeps empty-line carets and guides aligned.
           after: before || after ? {
-            contentIconPath: vscode.Uri.parse(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`),
+            contentIconPath: svgUri(svg),
             width: '8px', height: '1em', margin: '0 0 0 -8px',
             // Keep icons from raising small text or intercepting the marker hover.
             textDecoration: 'none; vertical-align: top; pointer-events: none',
           } : { contentText: '', width: '0px' },
         } : {}),
+        // VS Code won't add a breakpoint by clicking a glyph margin with an
+        // extension icon. Its gutter context menu and F9 still work there.
+        ...(glyph && marker ? { gutterIconPath: svgUri(glyphSvg), gutterIconSize: '100% 100%' } : {}),
         ...(!overlay && config.overviewRuler && marker ? { overviewRulerColor: `${config[marker.change ?? 'deleted']}${alpha}`, overviewRulerLane: vscode.OverviewRulerLane.Left } : {}),
         rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
       });
@@ -50,21 +67,25 @@ export class Decorations implements vscode.Disposable {
     if (previous && previous.diff === diff && previous.version === editor.document.version) return;
     const groups = new Map<vscode.TextEditorDecorationType, vscode.Range[]>();
     const markers = new Map((diff ? lineMarkers(diff) : []).map(marker => [marker.line, marker]));
+    const inset = config.gutter && config.gutterPlacement === 'inset';
+    const glyph = config.gutter && config.gutterPlacement === 'glyphMargin';
     // Reserve the same inset on unchanged lines, so edits never shift the code.
-    const lines = config.gutter && diff
+    const lines = inset && diff
       ? Array.from({ length: editor.document.lineCount }, (_, line) => line)
       : [...markers.keys()];
     for (const line of lines) {
       const marker = markers.get(line);
       const types = [this.type(marker, config)];
-      if (config.gutter) types.push(this.type(marker, config, true));
+      if (inset) types.push(this.type(marker, config, true));
+      // A deletion below a line belongs at the end of its last wrapped row.
+      const column = glyph && marker?.after && !marker.before ? editor.document.lineAt(line).text.length : 0;
       for (const type of types) {
         let group = groups.get(type);
         if (!group) {
           group = [];
           groups.set(type, group);
         }
-        group.push(new vscode.Range(line, 0, line, 0));
+        group.push(new vscode.Range(line, column, line, column));
       }
     }
     for (const type of previous?.types ?? this.types.values()) {

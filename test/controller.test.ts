@@ -82,6 +82,7 @@ class Document {
     this.uri = { scheme: 'file', fsPath: `/repo/${name}`, toString: () => `file:///repo/${name}` } as vscode.Uri;
   }
   get lineCount(): number { return this.text.split('\n').length; }
+  lineAt(line: number) { return { text: this.text.split('\n')[line] ?? '' }; }
   getText(): string { return this.text; }
   get api(): vscode.TextDocument { return this as unknown as vscode.TextDocument; }
 }
@@ -295,6 +296,7 @@ test('both split editors receive markers and clear them when text is restored', 
 });
 
 test('markers reserve an equal inset on every line and leave the breakpoint gutter free', async t => {
+  settings.set('guttered.gutterPlacement', 'inset');
   const { controller, document, view } = setup(t, new Document('same\nchanged\n'), 'same\noriginal\n');
   await controller.compare(document.api);
   const insetLines: number[] = [];
@@ -329,6 +331,35 @@ test('markers reserve an equal inset on every line and leave the breakpoint gutt
   settings.set('guttered.enabled', false);
   await controller.compare(document.api);
   assert.ok([...view.decorations.values()].every(ranges => ranges.length === 0));
+});
+
+test('glyph-margin markers are the default, mark only changed lines, and leave the text in place', async t => {
+  const { controller, document, view } = setup(t, new Document('same\nchanged\n'), 'same\noriginal\n');
+  const glyphs = () => [...view.decorations].filter(([, ranges]) => ranges.length).map(([key, ranges]) => {
+    const options = decorationOptions.get(key)!;
+    assert.equal(options.before, undefined, 'no inset shifts the text');
+    assert.equal(options.after, undefined);
+    assert.equal(options.gutterIconSize, '100% 100%');
+    assert.ok(options.overviewRulerColor);
+    const svg = Buffer.from(String(options.gutterIconPath).split(',')[1]!, 'base64').toString();
+    return { lines: ranges.map(range => range.start.line), columns: ranges.map(range => range.start.character), wholeLine: options.isWholeLine, svg };
+  });
+  await controller.compare(document.api);
+  const [modified, ...others] = glyphs();
+  assert.equal(others.length, 0);
+  assert.deepEqual(modified!.lines, [1]);
+  assert.equal(modified!.wholeLine, true, 'bars span wrapped rows');
+  assert.match(modified!.svg, /<rect width="3" height="100%" fill="#E6A817"\/>/);
+  document.text = 'same\n';
+  document.version++;
+  await controller.compare(document.api);
+  const [deleted, ...rest] = glyphs();
+  assert.equal(rest.length, 0);
+  assert.deepEqual(deleted!.lines, [0]);
+  assert.equal(deleted!.wholeLine, false, 'a deletion glyph does not repeat on wrapped rows');
+  assert.deepEqual(deleted!.columns, [4], 'a deletion below the line anchors to its last wrapped row');
+  assert.ok(!deleted!.svg.includes('<rect'), 'a deletion alone has no bar');
+  assert.match(deleted!.svg, /<svg y="100%" overflow="visible"><path fill="#F44336" d="M0 0h7L0-5z"\/><\/svg>/, 'the triangle sits at the bottom edge');
 });
 
 test('background windows skip polling and focus restoration triggers a refresh', async t => {

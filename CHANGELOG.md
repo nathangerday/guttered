@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Show markers in the glyph margin alongside breakpoints by default. Clicking a changed line there doesn't add a breakpoint, so use the gutter's right-click menu or F9. Set `guttered.gutterPlacement` to `inset` for the previous placement, which keeps breakpoint clicks free and previews changes on hover.
+- Right-click the line number or glyph margin of a changed line to open the diff or restore the change at that line.
+- Fix **Open Diff with Merge Base** in the editor's Guttered context menu, which reported an invalid diff target.
+- Keep deletion markers at their boundary on wrapped lines.
+- Hide gutter actions in non-file editors and cancel diff or restore commands if the document changes while switching editors.
+
 ## 0.4.3
 
 - Keep the Source Control icon's count limited to VS Code's local changes by removing Guttered's branch-change badge.
