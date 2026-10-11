@@ -3,7 +3,7 @@
   "displayName": "Guttered",
   "icon": "assets/icon.png",
   "description": "Live gutter indicators for your branch's changes since its merge base, including unsaved edits.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "publisher": "nathangerday",
   "license": "MIT",
   "repository": {

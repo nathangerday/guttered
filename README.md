@@ -6,7 +6,7 @@ Guttered shows your branch's changes **since its merge base with the repository'
 
 ![Branch-change markers and the changed-files tree in VS Code](assets/screenshots/branch-changes-dark.png)
 
-*Committed branch changes and an unsaved edit, with the changed-files tree in Source Control.*
+*Committed branch changes and an unsaved edit, with markers in the default glyph margin and the changed-files tree in Source Control.* [View the light theme](assets/screenshots/branch-changes-light.png).
 
 ## Compare from where your branches diverged
 
@@ -41,6 +41,10 @@ npm run package
 
 Added lines have soft green bars, modified lines have soft yellow bars, and deleted lines have soft red triangles on the neighboring line. Markers use 30% opacity by default, keeping native Git indicators more prominent on both dark and light themes. Markers sit in the glyph margin alongside breakpoints, so the text starts at its usual position. The overview ruler also shows the changes; text backgrounds stay unchanged. Right-click the line number or glyph margin of a marked line for Guttered's actions at that line.
 
+![The gutter menu contains VS Code's breakpoint actions and Guttered's diff and restore actions](assets/screenshots/gutter-menu.png)
+
+*Open the merge-base diff or restore the clicked change from the same menu as VS Code's breakpoint actions.*
+
 The glyph margin has trade-offs set by VS Code:
 
 - Clicking the glyph margin of a changed line doesn't add a breakpoint. Right-click the gutter and choose **Add Breakpoint**, or press F9. Clicking an existing breakpoint still removes it.
@@ -66,6 +70,10 @@ Marker previews stay separate from code documentation. They require the inset pl
 The **Guttered: Branch Changes** section in Source Control lists changed files from the active file's repository, grouped under their parent folders. It uses the selected reference's merge base and includes committed, staged, unstaged, untracked, and unsaved changes. With no file selected, it uses the first workspace folder. Files use your file icon theme, with **A** (green), **M** (blue), and **D** (red) badges for added, modified, and deleted files. Badge colors follow your theme's Git gutter colors. Click a file to compare its read-only merge-base version on the left with the working file, including unsaved edits, on the right. Added files have an empty left side; deleted files have an empty right side. Baseline loading keeps the existing text and size limits. Renames appear as a deletion and an addition, matching the gutter's path-based comparison.
 
 The tree updates automatically while visible. It lists saved file changes through Git and applies open, unsaved buffers on top, so restoring a buffer to the baseline removes that file from the list. Binary and large files can appear in the tree even when their gutter comparison is unavailable. The view's toolbar offers toggle, reference selection, and refresh. The Source Control icon keeps VS Code's normal count of local changes.
+
+![The native diff compares the merge-base checkout code with the current file, including the unsaved threshold of 60](assets/screenshots/merge-base-diff.png)
+
+*The merge base is on the left; the current file, including unsaved edits, is on the right.*
 
 A *hunk* is a group of adjacent changed lines. The available actions are:
 
