@@ -64,6 +64,11 @@
         "icon": "$(list-tree)"
       },
       {
+        "command": "guttered.openFile",
+        "title": "Guttered: Open File",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "guttered.actions",
         "title": "Guttered: Comparison Actions",
         "icon": "$(git-compare)"
@@ -105,6 +110,19 @@
       ]
     },
     "menus": {
+      "commandPalette": [
+        {
+          "command": "guttered.openFile",
+          "when": "false"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "guttered.openFile",
+          "when": "view == guttered.changedFiles && viewItem == gutteredFile",
+          "group": "inline@1"
+        }
+      ],
       "view/title": [
         {
           "command": "guttered.toggle",

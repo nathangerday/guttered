@@ -113,6 +113,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
     await context.workspaceState.update('enabled', enabled);
   });
   command('showChangedFiles', () => vscode.commands.executeCommand('guttered.changedFiles.focus'));
+  command('openFile', node => changedFiles.openFile(node));
   command('changeBase', async () => {
     const editorUri = vscode.window.activeTextEditor?.document.uri;
     const activeUri = editorUri?.scheme === 'file' ? editorUri : changedFiles.uri;

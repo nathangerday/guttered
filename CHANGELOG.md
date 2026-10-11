@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add an **Open File** action when hovering over added or modified files in **Guttered: Branch Changes**.
+
 ## 0.5.1
 
 - Refresh the dark and light screenshots for the default glyph-margin placement, show the gutter menu alongside VS Code's breakpoint actions, and update the diff and inset-hover examples.

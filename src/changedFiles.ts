@@ -17,6 +17,7 @@ export class ChangedFiles implements vscode.TreeDataProvider<FileNode>, vscode.F
   readonly onDidChangeTreeData = this.changed.event;
   private readonly view: vscode.TreeView<FileNode>;
   private readonly subscriptions: vscode.Disposable[] = [];
+  private readonly fileUris = new WeakMap<FileNode, vscode.Uri>();
   private nodes: FileNode[] = [];
   private anchor?: vscode.Uri;
   private snapshot?: Snapshot;
@@ -68,6 +69,13 @@ export class ChangedFiles implements vscode.TreeDataProvider<FileNode>, vscode.F
 
   getChildren(node?: FileNode): FileNode[] { return node ? node.children : this.nodes; }
 
+  async openFile(node: unknown): Promise<void> {
+    if (!node || typeof node !== 'object') return;
+    // Keep the action tied to the displayed row, even if the active repository changes.
+    const uri = this.fileUris.get(node as FileNode);
+    if (uri) await vscode.commands.executeCommand('vscode.open', uri, { preview: true });
+  }
+
   provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
     const status = uri.query;
     if (uri.scheme !== changeScheme || (status !== 'A' && status !== 'M' && status !== 'D')) return;
@@ -83,6 +91,10 @@ export class ChangedFiles implements vscode.TreeDataProvider<FileNode>, vscode.F
     item.id = JSON.stringify([snapshot.root, node.path, !!node.status]);
     item.iconPath = node.status ? vscode.ThemeIcon.File : vscode.ThemeIcon.Folder;
     if (node.status) {
+      if (node.status !== 'D') {
+        item.contextValue = 'gutteredFile';
+        this.fileUris.set(node, uri);
+      }
       // Keep theme file icons while isolating badges from working-tree Git.
       // Including the status in the URI also avoids stale decoration caches.
       item.resourceUri = uri.with({ scheme: changeScheme, query: node.status });
