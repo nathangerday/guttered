@@ -3,7 +3,7 @@
   "displayName": "Guttered",
   "icon": "assets/icon.png",
   "description": "Live gutter indicators for your branch's changes since its merge base, including unsaved edits.",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "publisher": "nathangerday",
   "license": "MIT",
   "repository": {
@@ -404,7 +404,7 @@
           "type": "boolean",
           "default": false,
           "scope": "application",
-          "markdownDescription": "Experimental left-click support for Guttered glyph-margin markers. Requires a writable desktop VS Code client. Enable in a local client window first to use it in WSL/SSH/containers, or install the matching Guttered Workbench helper locally to install and restore from remote windows. Use **Guttered: Enable Gutter Clicks (Experimental)** to install the client hook, then reload. The hook modifies a VS Code file and may cause an installation-integrity warning. Use **Disable Gutter Clicks and Restore Workbench** before uninstalling. Setting this to false stops handling but does not restore the file.",
+          "markdownDescription": "Experimental left-click support for Guttered glyph-margin markers. Requires a writable desktop VS Code client. Enable in a local client window first to use it in WSL/SSH/containers, or install the matching Guttered Remote/WSL Helper locally to install and restore from remote windows. Use **Guttered: Enable Gutter Clicks (Experimental)** to install the client hook, then reload. The hook modifies a VS Code file and may cause an installation-integrity warning. Use **Disable Gutter Clicks and Restore Workbench** before uninstalling. Setting this to false stops handling but does not restore the file.",
           "ignoreSync": true
         },
         "guttered.diffView": {

@@ -112,7 +112,7 @@ Base-reference overrides apply to the current workspace folder, so repositories 
 
 ## Experimental gutter clicks
 
-For the selected diff view with one click directly on the glyph marker, run **Guttered: Enable Gutter Clicks (Experimental)** in the Command Palette, then choose **Reload Window**. This option is off by default. It requires a writable desktop VS Code installation. Local workspaces need only Guttered. For **Windows VS Code connected to WSL**, enable the hook in a local Windows window first, then open WSL with the matching Guttered version installed there. An already-installed hook connects directly to the remote extension; the companion is optional. To install or restore the Windows hook from inside WSL, install [**Guttered Workbench**](https://marketplace.visualstudio.com/items?itemName=nathangerday.guttered-workbench) locally on Windows. The same routing supports desktop SSH and container workspaces; browser-hosted VS Code is unsupported.
+For the selected diff view with one click directly on the glyph marker, run **Guttered: Enable Gutter Clicks (Experimental)** in the Command Palette, then choose **Reload Window**. This option is off by default. It requires a writable desktop VS Code installation. Local workspaces need only Guttered. For **Windows VS Code connected to WSL**, enable the hook in a local Windows window first, then open WSL with the matching Guttered version installed there. An already-installed hook connects directly to the remote extension; the companion is optional. To install or restore the Windows hook from inside WSL, install [**Guttered Remote/WSL Helper**](https://marketplace.visualstudio.com/items?itemName=nathangerday.guttered-workbench) locally on Windows. The same routing supports desktop SSH and container workspaces; browser-hosted VS Code is unsupported.
 
 **Status** works from WSL in either setup. With the companion installed locally, **Enable** and **Disable/Restore** also work from the WSL window: the companion handles the Windows installation while comparisons and diff commands stay in WSL. Without it, run the installation or restore commands in a local Windows window. The injection setting belongs to the desktop client, applies across its local and remote windows, and is excluded from Settings Sync by default. Guttered and the companion must contain the same hook revision; Guttered reports mismatched versions instead of connecting.
 
@@ -205,7 +205,7 @@ Paste the token into the masked login prompt. VSCE saves the credential outside 
 For a new release, give the main extension and companion the same version, update both changelogs and documentation, run the tests, and commit the release changes before publishing. For example:
 
 ```sh
-release_version=0.7.1 # Replace with the next unpublished version.
+release_version=0.7.2 # Replace with the next unpublished version.
 npm version "$release_version" --no-git-tag-version
 npm --prefix workbench-extension version "$release_version" --no-git-tag-version
 npm run check

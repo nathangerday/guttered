@@ -28,12 +28,12 @@ export class WorkbenchInstaller implements vscode.Disposable {
     await config.update('workbenchInjection', enabled, vscode.ConfigurationTarget.Global);
   }
   private requireClient(): void {
-    if (!localWorkbenchHost(this.context)) throw new Error('Workbench installation requires a desktop UI extension host. Install Guttered Workbench locally on the Windows/client side, not in WSL or another remote.');
+    if (!localWorkbenchHost(this.context)) throw new Error('Workbench installation requires a desktop UI extension host. Install Guttered Remote/WSL Helper locally on the Windows/client side, not in WSL or another remote.');
   }
   private async compatible(revision: unknown) {
     this.requireClient();
     const bundle = await payload(this.context);
-    if (revision !== bundle.revision) throw new Error('Guttered and Guttered Workbench have different gutter-click hooks. Install matching versions on the workspace and client sides, then reload.');
+    if (revision !== bundle.revision) throw new Error('Guttered and Guttered Remote/WSL Helper have different gutter-click hooks. Install matching versions on the workspace and client sides, then reload.');
     return bundle;
   }
   private async patch(): Promise<WorkbenchPatch> {

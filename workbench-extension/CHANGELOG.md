@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1
+
+- Rename the extension to **Guttered Remote/WSL Helper**, including its command titles and installation documentation. Preserve the extension ID and hook payload for existing installations.
+
 ## 0.7.0
 
 - First release of the optional desktop companion for Guttered’s experimental glyph clicks in WSL, SSH, and container workspaces.

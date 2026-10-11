@@ -1,9 +1,9 @@
 {
   "name": "guttered-workbench",
-  "displayName": "Guttered Workbench",
+  "displayName": "Guttered Remote/WSL Helper",
   "icon": "icon.png",
   "description": "Optional desktop helper for Guttered glyph clicks in WSL and other remote workspaces.",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "publisher": "nathangerday",
   "license": "MIT",
   "repository": {
@@ -33,23 +33,23 @@
     "commands": [
       {
         "command": "guttered.workbench.connect",
-        "title": "Guttered Workbench: Connect Gutter Click Bridge"
+        "title": "Guttered Remote/WSL Helper: Connect Gutter Click Bridge"
       },
       {
         "command": "guttered.workbench.disconnect",
-        "title": "Guttered Workbench: Disconnect Gutter Click Bridge"
+        "title": "Guttered Remote/WSL Helper: Disconnect Gutter Click Bridge"
       },
       {
         "command": "guttered.workbench.enable",
-        "title": "Guttered Workbench: Install Gutter Click Hook"
+        "title": "Guttered Remote/WSL Helper: Install Gutter Click Hook"
       },
       {
         "command": "guttered.workbench.disable",
-        "title": "Guttered Workbench: Restore Workbench"
+        "title": "Guttered Remote/WSL Helper: Restore Workbench"
       },
       {
         "command": "guttered.workbench.status",
-        "title": "Guttered Workbench: Bridge Status"
+        "title": "Guttered Remote/WSL Helper: Bridge Status"
       }
     ],
     "menus": {

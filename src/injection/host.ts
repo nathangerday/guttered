@@ -72,10 +72,10 @@ export class WorkbenchInjection implements vscode.Disposable {
           if (action === 'connect' && result) return result;
           const status = !enabled ? 'Experimental gutter clicks are disabled.' : result?.protocol === 2 && result.revision === revision && result.active
             ? 'Experimental gutter clicks are active in this remote window.'
-            : 'Enable the gutter-click hook in a local Windows/client window and reload, or install Guttered Workbench locally to enable it from this remote window.';
+            : 'Enable the gutter-click hook in a local Windows/client window and reload, or install Guttered Remote/WSL Helper locally to enable it from this remote window.';
           if (action === 'status') { void vscode.window.showInformationMessage(`Guttered: ${status}`); return status; }
         }
-        throw new Error(`Enable or restore the hook from a local Windows/client window, or install Guttered Workbench (${helperId}) locally to do it from WSL or this remote workspace.`);
+        throw new Error(`Enable or restore the hook from a local Windows/client window, or install Guttered Remote/WSL Helper (${helperId}) locally to do it from WSL or this remote workspace.`);
       }
       throw error;
     }

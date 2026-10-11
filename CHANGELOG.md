@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1
+
+- Rename the optional desktop companion to **Guttered Remote/WSL Helper** in its Marketplace listing, commands, setup documentation, settings, and connection messages. Keep its extension ID and gutter-click payload unchanged so existing installations update normally.
+
 ## 0.7.0
 
 - Replace the custom webview with two selectable native diff modes: VS Code’s diff editor by default, and experimental SCM Quick Diff previews. Use **Guttered: Select Diff View** or `guttered.diffView` to choose. Both use installed language grammars and themes, including Clojure, preserve manual language modes and file associations, and keep unsaved content live.

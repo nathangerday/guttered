@@ -1,8 +1,8 @@
-# Guttered Workbench
+# Guttered Remote/WSL Helper
 
 An optional desktop companion for Guttered's experimental glyph clicks in **Windows VS Code connected to WSL**, SSH, or a development container. Install this helper in the **local Windows/client extension host** and install the matching Guttered version in the **WSL/remote workspace**. It is not needed for local workspaces or for connecting to a hook that was already enabled in a local client window. Install it when you want to enable or restore the client patch from inside a remote window.
 
-Install [Guttered Workbench from the Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=nathangerday.guttered-workbench), or use the matching helper VSIX from [Guttered's GitHub releases](https://github.com/nathangerday/guttered/releases). In the Extensions view, choose **Install Locally** for this helper; install the main Guttered extension in WSL or the remote workspace. Keep their versions matched.
+Install [Guttered Remote/WSL Helper from the Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=nathangerday.guttered-workbench), or use the matching helper VSIX from [Guttered's GitHub releases](https://github.com/nathangerday/guttered/releases). In the Extensions view, choose **Install Locally** for this helper; install the main Guttered extension in WSL or the remote workspace. Keep their versions matched.
 
 Run **Guttered: Enable Gutter Clicks (Experimental)** from Guttered's Command Palette commands and reload the window. You can enable the hook in a local Windows workspace first, then open a WSL project; with this helper installed locally, the remote Guttered extension connects to the same Windows workbench hook. A plain left click on a Guttered marker opens the view selected by **Guttered: Select Diff View**: the native diff editor, or an experimental inline Quick Diff preview. In Quick Diff, select **Guttered merge base** if Git opens first. Right clicks, modifier clicks, breakpoints, and other glyph actions retain their native behavior.
 
