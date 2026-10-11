@@ -13,3 +13,5 @@ dist/integration.js
 tsconfig.json
 package-lock.json
 **/*.vsix
+workbench-extension/**
+dist/workbenchExtension.js

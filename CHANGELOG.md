@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0
+
+- Replace the custom webview with two selectable native diff modes: VS Code’s diff editor by default, and experimental SCM Quick Diff previews. Use **Guttered: Select Diff View** or `guttered.diffView` to choose. Both use installed language grammars and themes, including Clojure, preserve manual language modes and file associations, and keep unsaved content live.
+- Add copy-patch and working-file toolbar actions to native diff editors, and scoped Quick Diff actions with undoable restoration of the complete displayed block. Keep Git’s comparison in Quick Diff’s baseline selector; choose **Guttered merge base** if a hover action or glyph click initially opens Git. Native full diffs always select Guttered’s baseline directly.
+- Document the two diff modes with Clojure screenshots, the Quick Diff selector, upgrade/reload steps, and Windows/WSL installation. Remove the custom panel’s syntax worker and grammar dependencies.
+
+- Add the optional **Guttered Workbench** UI companion for Windows/WSL, SSH, and container workspaces. Connect Windows-first installations directly from WSL without requiring the companion; use it to install or restore the hook from a remote window. Keep workbench patching and its setting in the desktop client, route clicked URI objects to the workspace extension through VS Code RPC, and reject stale sessions or mismatched hook versions.
+
+- Add optional experimental workbench injection for opening the selected diff view with a plain left click on a glyph-margin marker. Include enable, status, and restore commands, a default-off client application setting, verified recovery artifacts, and manual re-enabling after application updates. Preserve context menus, modifier clicks, and other glyph actions.
+
 ## 0.6.0
 
 - Add **Preview Change with Merge Base**, a theme-aware diff panel with inline and side-by-side layouts, change navigation, character highlights, copy patch, file/full-diff actions, and undoable revert. Open it from the changed-code hover, gutter menu, editor menu, Command Palette, or a user-assigned shortcut.

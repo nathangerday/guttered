@@ -3,7 +3,7 @@
   "displayName": "Guttered",
   "icon": "assets/icon.png",
   "description": "Live gutter indicators for your branch's changes since its merge base, including unsaved edits.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "nathangerday",
   "license": "MIT",
   "repository": {
@@ -49,7 +49,8 @@
     "test:integration": "npm run build && node scripts/test-integration.mjs",
     "vscode:prepublish": "npm run check && npm run build",
     "package": "vsce package --no-dependencies",
-    "publish:marketplace": "vsce publish --no-dependencies"
+    "publish:marketplace": "vsce publish --no-dependencies",
+    "package:workbench": "npm run build && cd workbench-extension && vsce package --no-dependencies"
   },
   "contributes": {
     "commands": [
@@ -104,6 +105,52 @@
       {
         "command": "guttered.restoreChange",
         "title": "Guttered: Restore Change from Merge Base"
+      },
+      {
+        "command": "guttered.enableWorkbenchInjection",
+        "title": "Guttered: Enable Gutter Clicks (Experimental)"
+      },
+      {
+        "command": "guttered.disableWorkbenchInjection",
+        "title": "Guttered: Disable Gutter Clicks and Restore Workbench"
+      },
+      {
+        "command": "guttered.workbenchInjectionStatus",
+        "title": "Guttered: Gutter Clicks Status"
+      },
+      {
+        "command": "guttered.selectDiffView",
+        "title": "Guttered: Select Diff View",
+        "icon": "$(inspect)"
+      },
+      {
+        "command": "guttered.copyChangePatch",
+        "title": "Guttered: Copy Change Patch",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "guttered.openWorkingFile",
+        "title": "Guttered: Open Working File",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "guttered.openFileDiff",
+        "title": "Guttered: Open File Diff"
+      },
+      {
+        "command": "guttered.restoreQuickDiff",
+        "title": "Guttered: Revert Change",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "guttered.copyQuickDiffPatch",
+        "title": "Guttered: Copy Patch",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "guttered.openQuickDiffFull",
+        "title": "Guttered: Full Diff",
+        "icon": "$(diff)"
       }
     ],
     "views": {
@@ -118,6 +165,22 @@
       "commandPalette": [
         {
           "command": "guttered.openFile",
+          "when": "false"
+        },
+        {
+          "command": "guttered.openFileDiff",
+          "when": "false"
+        },
+        {
+          "command": "guttered.restoreQuickDiff",
+          "when": "false"
+        },
+        {
+          "command": "guttered.copyQuickDiffPatch",
+          "when": "false"
+        },
+        {
+          "command": "guttered.openQuickDiffFull",
           "when": "false"
         }
       ],
@@ -143,29 +206,39 @@
           "command": "guttered.refresh",
           "when": "view == guttered.changedFiles",
           "group": "navigation@3"
+        },
+        {
+          "command": "guttered.selectDiffView",
+          "when": "view == guttered.changedFiles",
+          "group": "navigation@4"
         }
       ],
       "editor/lineNumber/context": [
         {
           "command": "guttered.previewChange",
-          "when": "editorLineNumber in guttered.markedLines && resourceScheme == file",
+          "when": "editorLineNumber in guttered.markedLines && (resourceScheme == file || resourceScheme == vscode-remote)",
           "group": "9_guttered@1"
         },
         {
           "command": "guttered.openDiff",
-          "when": "editorLineNumber in guttered.markedLines && resourceScheme == file",
+          "when": "editorLineNumber in guttered.markedLines && (resourceScheme == file || resourceScheme == vscode-remote)",
           "group": "9_guttered@2"
         },
         {
           "command": "guttered.restoreChange",
-          "when": "editorLineNumber in guttered.markedLines && resourceScheme == file",
+          "when": "editorLineNumber in guttered.markedLines && (resourceScheme == file || resourceScheme == vscode-remote)",
           "group": "9_guttered@3"
+        },
+        {
+          "command": "guttered.copyChangePatch",
+          "when": "editorLineNumber in guttered.markedLines && (resourceScheme == file || resourceScheme == vscode-remote)",
+          "group": "9_guttered@4"
         }
       ],
       "editor/context": [
         {
           "submenu": "guttered.context",
-          "when": "resourceScheme == file",
+          "when": "resourceScheme == file || resourceScheme == vscode-remote",
           "group": "9_cutcopypaste@20"
         }
       ],
@@ -189,6 +262,43 @@
         {
           "command": "guttered.restoreChange",
           "group": "3_restore"
+        },
+        {
+          "command": "guttered.copyChangePatch",
+          "group": "3_restore@2"
+        },
+        {
+          "command": "guttered.selectDiffView",
+          "group": "4_view"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "guttered.copyChangePatch",
+          "when": "guttered.nativeDiff",
+          "group": "navigation@1"
+        },
+        {
+          "command": "guttered.openWorkingFile",
+          "when": "guttered.nativeDiff",
+          "group": "navigation@2"
+        }
+      ],
+      "scm/change/title": [
+        {
+          "command": "guttered.restoreQuickDiff",
+          "when": "originalResourceScheme == guttered-base",
+          "group": "navigation@1"
+        },
+        {
+          "command": "guttered.copyQuickDiffPatch",
+          "when": "originalResourceScheme == guttered-base",
+          "group": "navigation@2"
+        },
+        {
+          "command": "guttered.openQuickDiffFull",
+          "when": "originalResourceScheme == guttered-base",
+          "group": "navigation@3"
         }
       ]
     },
@@ -239,7 +349,7 @@
           "type": "boolean",
           "default": true,
           "scope": "resource",
-          "description": "Show a compact Open change diff action when hovering over changed code. Opens the Guttered diff panel with one click."
+          "description": "Show a compact Open change diff action when hovering over changed code. Opens the selected Guttered diff view."
         },
         "guttered.gutterPlacement": {
           "type": "string",
@@ -249,7 +359,7 @@
             "inset"
           ],
           "enumDescriptions": [
-            "The glyph margin, beside breakpoints. Clicking a changed line there doesn't add a breakpoint; right-click the gutter or press F9 instead. Hover the changed code to open the diff panel; glyphs have no hover preview.",
+            "The glyph margin, beside breakpoints. Clicking a changed line there does not add a breakpoint; right-click the gutter or press F9 instead. Hover the changed code to open the selected diff view; glyphs have no hover preview.",
             "A small inset before the text. Breakpoint clicks and other gutter controls stay free, and hovering a marker previews the change."
           ],
           "scope": "resource",
@@ -289,16 +399,35 @@
           "maximum": 1,
           "scope": "resource",
           "description": "Opacity of Guttered markers, including the overview ruler. 0 is invisible and 1 is fully opaque; the default keeps native Git indicators more prominent."
+        },
+        "guttered.workbenchInjection": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "markdownDescription": "Experimental left-click support for Guttered glyph-margin markers. Requires a writable desktop VS Code client. Enable in a local client window first to use it in WSL/SSH/containers, or install the matching Guttered Workbench helper locally to install and restore from remote windows. Use **Guttered: Enable Gutter Clicks (Experimental)** to install the client hook, then reload. The hook modifies a VS Code file and may cause an installation-integrity warning. Use **Disable Gutter Clicks and Restore Workbench** before uninstalling. Setting this to false stops handling but does not restore the file.",
+          "ignoreSync": true
+        },
+        "guttered.diffView": {
+          "type": "string",
+          "enum": [
+            "native",
+            "quickDiff"
+          ],
+          "default": "native",
+          "scope": "resource",
+          "enumDescriptions": [
+            "Open VS Code’s native diff editor at the selected line. Uses installed language grammars and the normal diff layout settings.",
+            "Experimental native inline preview. Adds a merge-base Quick Diff provider alongside Git; use the preview’s base selector when changes overlap."
+          ],
+          "markdownDescription": "Diff view opened by changed-code hovers, glyph clicks, and Preview Change. Quick Diff shares VS Code’s change-indicator gutter and colors with Git, and appears as an additional Source Control provider. Its preview command uses a built-in editor command; select Guttered in the base selector when Git opens first."
         }
       }
     }
   },
   "dependencies": {
-    "diff": "^9.0.0",
-    "lowlight": "^3.3.0"
+    "diff": "^9.0.0"
   },
   "devDependencies": {
-    "@types/hast": "^3.0.5",
     "@types/node": "^22.0.0",
     "@types/vscode": "~1.95.0",
     "@vscode/test-electron": "^3.0.0",

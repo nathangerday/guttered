@@ -4,6 +4,7 @@ import { configuration } from './config';
 import type { Controller } from './controller';
 import { fileTree, includeUnsaved, type EditedFile, type FileNode } from './files';
 import type { FileChange, Snapshot } from './git';
+import { baselineUri } from './nativeDiff';
 
 const changeScheme = 'guttered-change';
 const statuses = {
@@ -99,14 +100,11 @@ export class ChangedFiles implements vscode.TreeDataProvider<FileNode>, vscode.F
       // Including the status in the URI also avoids stale decoration caches.
       item.resourceUri = uri.with({ scheme: changeScheme, query: node.status });
       item.tooltip = `${statuses[node.status].label}: ${node.path}\nCompared with ${snapshot.baseRef} merge base ${snapshot.mergeBase.slice(0, 8)}`;
-      const baseline = vscode.Uri.from({
-        scheme: 'guttered-base', path: `/${node.path}`,
-        query: JSON.stringify({ root: snapshot.root, mergeBase: snapshot.mergeBase, file: node.path, maxBytes: configuration(uri).maxBytes }),
-      });
+      const baseline = baselineUri(uri, snapshot, node.path, configuration(uri).maxBytes);
       const current = node.status === 'D' ? uri.with({ scheme: 'guttered-empty' }) : uri;
       item.command = {
-        command: 'vscode.diff', title: 'Open Diff with Merge Base',
-        arguments: [baseline, current, `${path.posix.basename(node.path)} · ${snapshot.baseRef} merge-base ${snapshot.mergeBase.slice(0, 8)}`, { preview: true }],
+        command: 'guttered.openFileDiff', title: 'Open Diff with Merge Base',
+        arguments: [baseline, current, `${path.posix.basename(node.path)} · ${snapshot.baseRef} merge-base ${snapshot.mergeBase.slice(0, 8)}`],
       };
     }
     return item;

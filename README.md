@@ -49,7 +49,7 @@ The glyph margin has trade-offs set by VS Code:
 
 - Clicking the glyph margin of a changed line doesn't add a breakpoint. Right-click the gutter and choose **Add Breakpoint**, or press F9. Clicking an existing breakpoint still removes it.
 - A breakpoint on a changed line needs a second glyph column, so the margin widens while it's set.
-- Glyphs have no hover preview. Hover the changed code and click **Open change diff**, or use **Preview Change with Merge Base** from the gutter menu. VS Code's public extension API exposes neither hover nor left-click events for decoration glyphs.
+- Glyphs have no hover preview. Hover the changed code and click **Open change diff**, or use **Preview Change with Merge Base** from the gutter menu. VS Code's public extension API exposes neither hover nor left-click events for decoration glyphs. The optional [experimental workbench hook](#experimental-gutter-clicks) adds direct left-click support.
 - Another extension's gutter icon on the same changed line, such as a bookmark, shares the marker's slot, and VS Code shows only one of them.
 - Markers need **Editor: Glyph Margin**, which is on by default.
 
@@ -57,7 +57,7 @@ To keep breakpoint clicks free and preview changes on hover, set **Guttered: Gut
 
 The status bar shows the selected reference, such as `origin/trunk (merge-base)`. Hover for the current branch, merge-base SHA, and comparison state. Click it to open the actions menu.
 
-Hover over the code on a changed line to reveal a compact **Open change diff** link alongside any language documentation. One click opens the Guttered diff panel at that change, including unsaved edits. The action works with either marker placement and adds no permanent text or spacing. Disable it with **Guttered: Hover Action** (`guttered.hoverAction`).
+Hover over the code on a changed line to reveal a compact **Open change diff** link alongside any language documentation. One click opens the selected diff view at that change, including unsaved edits. The action works with either marker placement and adds no permanent text or spacing. Disable it with **Guttered: Hover Action** (`guttered.hoverAction`).
 
 With the inset placement, hover over a branch-change marker to preview the removed and added lines. Click **Open Diff with Merge Base** in the hover to open VS Code's diff view at that change, including unsaved edits. Large previews are shortened; the diff view shows the full comparison.
 
@@ -71,19 +71,32 @@ Marker previews stay separate from code documentation. They require the inset pl
 
 The **Guttered: Branch Changes** section in Source Control lists changed files from the active file's repository, grouped under their parent folders. It uses the selected reference's merge base and includes committed, staged, unstaged, untracked, and unsaved changes. With no file selected, it uses the first workspace folder. Files use your file icon theme, with **A** (green), **M** (blue), and **D** (red) badges for added, modified, and deleted files. Badge colors follow your theme's Git gutter colors. Click a file to compare its read-only merge-base version on the left with the working file, including unsaved edits, on the right. Hover over a file row and click its **Open File** icon to open the working file directly. Added files have an empty left side; deleted files have an empty right side. Baseline loading keeps the existing text and size limits. Renames appear as a deletion and an addition, matching the gutter's path-based comparison.
 
-The tree updates automatically while visible. It lists saved file changes through Git and applies open, unsaved buffers on top, so restoring a buffer to the baseline removes that file from the list. Binary and large files can appear in the tree even when their gutter comparison is unavailable. The view's toolbar offers toggle, reference selection, and refresh. The Source Control icon keeps VS Code's normal count of local changes.
+The tree updates automatically while visible. It lists saved file changes through Git and applies open, unsaved buffers on top, so restoring a buffer to the baseline removes that file from the list. Binary and large files can appear in the tree even when their gutter comparison is unavailable. The view's toolbar offers toggle, reference selection, refresh, and diff-view selection. The Source Control icon keeps VS Code's normal count of local changes.
 
-![The native diff compares the merge-base checkout code with the current file, including the unsaved threshold of 60](assets/screenshots/merge-base-diff.png)
+## Choose a diff view
 
-*The merge base is on the left; the current file, including unsaved edits, is on the right.*
+**Preview Change with Merge Base** opens the selected diff view at the changed line. Run **Guttered: Select Diff View** from the Command Palette or the Branch Changes toolbar to choose either mode. The choice is saved for the current workspace folder, or in user settings for a file outside a workspace:
 
-A *hunk* is a group of adjacent changed lines. The available actions are:
+- **Native diff editor** (default) opens VS Code’s normal comparison editor. Both sides use the installed language grammars and theme, including Clojure. The original follows the working file’s language mode, including manual language selections. Use VS Code’s Diff View menu for inline or side-by-side comparison, its next/previous arrows for navigation, and **Revert Block** or **Revert Selection** for undoable buffer edits. Layout choices follow VS Code’s shared diff settings. Guttered adds **Copy Change Patch** and **Open Working File** to the editor toolbar; Copy uses the hunk at the cursor. Semantic highlighting on the read-only original depends on whether the language extension supports virtual documents.
+- **Inline Quick Diff (Experimental)** adds a **Guttered merge base** provider and clickable markers in VS Code’s native change-indicator gutter. Click a native marker, or use the changed-code hover or optional glyph hook, to open its compact inline preview. The base selector retains Git’s normal comparison alongside Guttered; select **Guttered merge base** if Git opens first at an overlapping change. Guttered’s **Revert Change**, **Copy Patch**, and **Full Diff** buttons appear only for its own baseline. Revert restores the complete displayed native block, supports normal Undo, and neither saves nor stages. Next/previous buttons and syntax highlighting are native.
 
-**Preview Change with Merge Base** opens a Guttered panel beside the file at the change you right-clicked. Switch between **Inline** and **Side by side**, navigate with the arrows or **Alt+Up/Down**, and inspect line and character highlights. **Revert change** restores the displayed hunk in the editor buffer without saving or staging; **Undo revert** reverses that edit while it is still the latest buffer change. The panel follows unsaved edits and merge-base changes. **Copy patch** copies the complete displayed hunk, **Open file** focuses its source line, and **Full diff** opens VS Code's native diff editor. Very large changes show a bounded excerpt; **Full diff** shows every line and **Revert change** restores the entire hunk.
+![The native diff editor shows Clojure syntax colors and compares the merge-base threshold of 100 with the unsaved value of 60](assets/screenshots/merge-base-diff.png)
 
-![The Guttered diff panel shows a syntax-highlighted change from the merge base, including an unsaved edit](assets/screenshots/change-preview.png)
+*The merge base is on the left; the current buffer is on the right. Clojure highlighting comes from VS Code, using the installed grammar and theme.*
 
-The panel highlights common languages using the file's language mode, including TypeScript/JavaScript, Python, HTML/CSS, JSON, YAML, SQL, C/C++, Java, Go, and Rust. Both sides retain multiline comment and string context. Syntax palettes adapt to dark, light, and high-contrast themes; custom editor token-color rules and semantic highlighting aren't copied into the webview. Unsupported languages and very large or slow-to-highlight files remain readable as plain text.
+![Quick Diff shows the Guttered merge-base comparison inside the Clojure editor, with its baseline selector and change actions](assets/screenshots/quick-diff.png)
+
+*Quick Diff keeps the preview inside the file. Its selector lets you compare with either **Guttered merge base** or **Git Local Changes**.*
+
+When a hover action or injected glyph click opens Quick Diff, VS Code may initially choose **Git Local Changes**. Select **Guttered merge base**, followed by your repository’s name, in the dropdown at the top of the preview to see the branch comparison. The command that opens this preview has no supported parameter for forcing a provider. The native diff editor always opens Guttered’s merge-base comparison directly.
+
+Quick Diff uses the editor’s SCM decoration settings and colors. It shares Git’s indicator lane, while Guttered’s existing glyph/inset markers keep their own appearance. Its Source Control entry lists changes in open compared files; the Branch Changes tree continues to list the whole branch. Choosing Native diff editor removes the extra provider. Clicking a native gutter indicator opens the supported SCM preview directly. Quick Diff is inline only; **Full Diff** offers both layouts. If `scm.diffDecorations` is `"none"`, **Preview Change** opens the full diff instead and explains how to enable the inline preview.
+
+Version 0.7.0 replaces the previous custom diff panel. Both new modes use installed language grammars, file associations, the working file’s language mode, and editor token-color customizations. They work with `.clj`, `.cljc`, `.cljs`, and other languages supported by the installed VS Code extensions. Semantic highlighting on a virtual original still depends on the language extension. Reload VS Code after upgrading so the new commands and settings are registered.
+
+## Comparison actions
+
+A *hunk* is a group of adjacent changed lines. Alongside the diff-view actions above, the available actions are:
 
 - **Toggle On/Off** pauses or resumes Guttered for this workspace. The status bar menu labels the action **Disable Guttered** or **Enable Guttered**.
 - **Show Changed Files** opens the branch-changes tree in Source Control.
@@ -97,6 +110,18 @@ All actions appear in the Command Palette and status bar menu. The **Guttered** 
 
 Base-reference overrides apply to the current workspace folder, so repositories nested in that folder share the override. For a file outside every workspace folder, the command updates user settings and affects all workspaces. The picker states which scope it will change. It lists branches already available locally; it does not fetch.
 
+## Experimental gutter clicks
+
+For the selected diff view with one click directly on the glyph marker, run **Guttered: Enable Gutter Clicks (Experimental)** in the Command Palette, then choose **Reload Window**. This option is off by default. It requires a writable desktop VS Code installation. Local workspaces need only Guttered. For **Windows VS Code connected to WSL**, enable the hook in a local Windows window first, then open WSL with the matching Guttered version installed there. An already-installed hook connects directly to the remote extension; the companion is optional. To install or restore the Windows hook from inside WSL, install [**Guttered Workbench**](https://marketplace.visualstudio.com/items?itemName=nathangerday.guttered-workbench) locally on Windows. The same routing supports desktop SSH and container workspaces; browser-hosted VS Code is unsupported.
+
+**Status** works from WSL in either setup. With the companion installed locally, **Enable** and **Disable/Restore** also work from the WSL window: the companion handles the Windows installation while comparisons and diff commands stay in WSL. Without it, run the installation or restore commands in a local Windows window. The injection setting belongs to the desktop client, applies across its local and remote windows, and is excluded from Settings Sync by default. Guttered and the companion must contain the same hook revision; Guttered reports mismatched versions instead of connecting.
+
+The command appends a small hook to the desktop client's workbench JavaScript and saves a verified backup beside that file. It uses VS Code's internal editor and command services to identify the clicked file, line, and document version. In a remote window, it sends URI objects through VS Code's command/RPC routing so VS Code translates remote authorities and paths for the workspace host. Each workspace activation gets its own session, and stale sessions or document versions are rejected. It opens no local server and does not relax the workbench's Content Security Policy. Only ordinary left clicks on a Guttered glyph are handled. Right clicks, modifier clicks, line numbers, native Git indicators, and breakpoints retain their normal behavior. If another glyph shares the same slot, its native action takes priority. The inset placement continues to use its existing hover action.
+
+This uses unsupported workbench internals. VS Code may show an installation-integrity warning, and application updates or Guttered hook changes may require running **Enable Gutter Clicks** again and reloading. Guttered never patches an update automatically. **Guttered: Gutter Clicks Status** reports whether the hook is active in the current window. Other already-open windows need reloading after installation or restoration.
+
+Run **Guttered: Disable Gutter Clicks and Restore Workbench** before uninstalling Guttered or its local companion. It stops click handling immediately, removes only Guttered's verified hook, and offers a reload. An application update is preserved rather than overwritten with the previous backup. If another tool changed the hook itself or damaged its recovery files, restoration stops and reports the backup path in **Output → Guttered Gutter Clicks**. Setting `guttered.workbenchInjection` to `false` also stops handling immediately, but keeps the installed file patch until you run the restore command.
+
 ## How comparison works
 
 Guttered identifies the repository containing each visible file. It reads `origin/HEAD` to find the default branch, using the first remote when there is no `origin`. If the symbolic reference is missing, `git ls-remote --symref` contacts the remote to ask for its default branch. Both successful and failed remote lookups are cached for five minutes; **Refresh Comparison** clears that cache. If the remote-tracking branch is unavailable, Guttered tries the corresponding local branch.
@@ -109,7 +134,7 @@ Guttered's Git operations are read-only. It never fetches, changes refs, stages 
 
 ## Settings
 
-All settings support workspace-folder overrides.
+Settings support workspace-folder overrides except `guttered.workbenchInjection`, which belongs to the desktop client and applies across its windows.
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
@@ -118,7 +143,9 @@ All settings support workspace-folder overrides.
 | `guttered.debounceMs` | `250` | Delay after typing, in milliseconds |
 | `guttered.maxFileSizeKB` | `1024` | Maximum size of either file, in KiB |
 | `guttered.gutter` | `true` | Show markers beside the code |
-| `guttered.hoverAction` | `true` | Show a one-click diff-panel action when hovering over changed code |
+| `guttered.workbenchInjection` | `false` | Experimental glyph clicks; install/restore with the dedicated commands |
+| `guttered.diffView` | `"native"` | Native diff editor or experimental `"quickDiff"` inline preview |
+| `guttered.hoverAction` | `true` | Show a one-click diff-view action when hovering over changed code |
 | `guttered.gutterPlacement` | `glyphMargin` | Place markers in the glyph margin, or in an `inset` before the text |
 | `guttered.overviewRuler` | `true` | Show overview ruler markers |
 | `guttered.opacity` | `0.3` | Marker opacity, from invisible (`0`) to fully opaque (`1`) |
@@ -132,7 +159,7 @@ When a comparison is unavailable, hover over the status item or open **Output �
 
 If default-branch detection cannot reach the remote, restore network or authentication access and run **Guttered: Refresh Comparison**. You can also set **Base Reference** to a locally available branch and compare offline. To record the remote's default branch in Git, run `git remote set-head origin --auto` once access is restored, replacing `origin` if your remote has another name.
 
-VS Code's native Git bars compare against HEAD and the index, so they can appear alongside Guttered's branch comparison with different markers. Use `scm.diffDecorations` to control the native bars; setting it to `"none"` hides them without affecting Guttered.
+VS Code's native Git bars compare against HEAD and the index, so they can appear alongside Guttered's branch comparison with different markers. Use `scm.diffDecorations` to control the native bars and Quick Diff previews. Setting it to `"none"` leaves Guttered's glyph/inset markers available, but hides its native Quick Diff indicators and inline preview.
 
 - Comparisons use file paths. A renamed file with no matching path in the baseline appears entirely added.
 - Ignored files without a baseline are skipped. A file explicitly added to Git, including with `git add -f`, is still compared. Git metadata has no indicators, including the `.git` pointer files used by worktrees and submodules.
@@ -154,12 +181,13 @@ npm run check                 # Strict TypeScript validation
 npm test                      # Diff, controller, and real Git repository tests
 npm run test:integration       # Desktop extension-host tests; downloads VS Code
 GUTTERED_TEST_NO_GIT=1 npm run test:integration   # Tests the fallback with built-in Git disabled
-npm run package               # Build the VSIX
+npm run package               # Build the main Guttered VSIX
+npm run package:workbench     # Build the optional UI companion VSIX
 ```
 
 Desktop tests require a graphical session that can focus the test window. Headless Linux needs Xvfb and a window manager. Set `VSCODE_VERSION` to select a release, for example `VSCODE_VERSION=1.95.3 npm run test:integration`. The tests use temporary repositories and user data and remove them afterward. Prefix environment variables as shown in a POSIX shell; in PowerShell, set them with `$env:NAME = 'value'` before running the command.
 
-The source files follow the work the extension performs: `git.ts` handles Git and its caches, `diff.ts` computes changes and restoration edits, `decorations.ts` draws markers, `hover.ts` previews individual changes, `files.ts` combines saved and unsaved file changes and builds their folder tree, `changedFiles.ts` manages the sidebar, `controller.ts` coordinates updates, `extension.ts` registers commands, and `config.ts` reads settings. The baseline cache is limited to 16 MiB and 256 entries. Runtime dependencies are bundled in the VSIX: `diff` computes changes, and `lowlight` supplies the panel's syntax-token trees through Highlight.js. The build includes their third-party notices.
+The source files follow the work the extension performs: `git.ts` handles Git and its caches, `diff.ts` computes changes and restoration edits, `decorations.ts` draws markers, `hover.ts` previews individual changes, `nativeDiff.ts` opens native diff editors, `quickDiff.ts` provides the native inline preview, `files.ts` combines saved and unsaved file changes and builds their folder tree, `changedFiles.ts` manages the sidebar, `controller.ts` coordinates updates, `extension.ts` registers commands, and `config.ts` reads settings. The baseline cache is limited to 16 MiB and 256 entries. The bundled `diff` dependency computes changes; the build includes its third-party notices. VS Code supplies syntax highlighting through the user's installed language extensions and theme.
 
 Transparent PNGs are available at 1254×1254 (`assets/logo.png`), 256×256 (`assets/icon.png`), and 128×128 (`assets/icon-128.png`). The VSIX includes only `assets/icon.png`.
 
@@ -174,12 +202,20 @@ npx vsce verify-pat nathangerday
 
 Paste the token into the masked login prompt. VSCE saves the credential outside this repository. Microsoft retires global personal access tokens on December 1, 2026; after that, use the guide's Microsoft Entra authentication workflow and pass `--azure-credential` to the publish command.
 
-For a new release, choose its version, update the changelog, run the tests, and commit the release changes before publishing. For example, to prepare the next patch version:
+For a new release, give the main extension and companion the same version, update both changelogs and documentation, run the tests, and commit the release changes before publishing. For example:
 
 ```sh
-npm version patch --no-git-tag-version
-# Update CHANGELOG.md, test, and commit before the next command.
-npm run publish:marketplace
+release_version=0.7.1 # Replace with the next unpublished version.
+npm version "$release_version" --no-git-tag-version
+npm --prefix workbench-extension version "$release_version" --no-git-tag-version
+npm run check
+npm test
+npm run test:integration
+npm run package
+npm run package:workbench
+# Review the VSIXs, then commit and tag the release before publishing.
+npx vsce publish --packagePath "guttered-$release_version.vsix"
+(cd workbench-extension && ../node_modules/.bin/vsce publish --packagePath "guttered-workbench-$release_version.vsix")
 ```
 
-The publish command checks TypeScript, builds the extension, and uploads it to the Marketplace. Every release needs a version that has not already been published.
+Packaging checks TypeScript and builds both extensions. Publishing with `--packagePath` uploads the exact reviewed VSIX without rebuilding. Publish both packages, then attach those same VSIXs and their SHA-256 checksums to a GitHub release for the version tag. Every release needs a version that has not already been published. The main and helper workbench payloads must be byte-identical; `cmp dist/workbench.js workbench-extension/dist/workbench.js` checks this.

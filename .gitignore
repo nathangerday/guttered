@@ -3,3 +3,5 @@ dist/
 .vscode-test/
 *.vsix
 *.log
+workbench-extension/LICENSE
+workbench-extension/icon.png

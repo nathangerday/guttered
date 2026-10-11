@@ -1,0 +1,80 @@
+{
+  "name": "guttered-workbench",
+  "displayName": "Guttered Workbench",
+  "icon": "icon.png",
+  "description": "Optional desktop helper for Guttered glyph clicks in WSL and other remote workspaces.",
+  "version": "0.7.0",
+  "publisher": "nathangerday",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nathangerday/guttered.git"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": false
+  },
+  "main": "./dist/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm --prefix .. run check && npm --prefix .. run build"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "guttered.workbench.connect",
+        "title": "Guttered Workbench: Connect Gutter Click Bridge"
+      },
+      {
+        "command": "guttered.workbench.disconnect",
+        "title": "Guttered Workbench: Disconnect Gutter Click Bridge"
+      },
+      {
+        "command": "guttered.workbench.enable",
+        "title": "Guttered Workbench: Install Gutter Click Hook"
+      },
+      {
+        "command": "guttered.workbench.disable",
+        "title": "Guttered Workbench: Restore Workbench"
+      },
+      {
+        "command": "guttered.workbench.status",
+        "title": "Guttered Workbench: Bridge Status"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "guttered.workbench.connect",
+          "when": "false"
+        },
+        {
+          "command": "guttered.workbench.disconnect",
+          "when": "false"
+        },
+        {
+          "command": "guttered.workbench.enable",
+          "when": "false"
+        },
+        {
+          "command": "guttered.workbench.disable",
+          "when": "false"
+        },
+        {
+          "command": "guttered.workbench.status",
+          "when": "false"
+        }
+      ]
+    }
+  }
+}

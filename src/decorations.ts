@@ -24,7 +24,7 @@ export class Decorations implements vscode.Disposable {
       // centered where breakpoints appear.
       const bar = marker?.change ? `<rect width="3" height="100%" fill="${config[marker.change]}"/>` : '';
       const below = marker?.after ? `<svg y="100%" overflow="visible"><path fill="${config.deleted}" d="M0 0h7L0-5z"/></svg>` : '';
-      const glyphSvg = `<svg xmlns="http://www.w3.org/2000/svg" opacity="${config.opacity}"><svg x="50%" overflow="visible"><g transform="translate(-1.5)">${bar}${before}${below}</g></svg></svg>`;
+      const glyphSvg = `<svg id="guttered-marker-v1" xmlns="http://www.w3.org/2000/svg" opacity="${config.opacity}"><svg x="50%" overflow="visible"><g transform="translate(-1.5)">${bar}${before}${below}</g></svg></svg>`;
       const alpha = Math.round(config.opacity * 255).toString(16).padStart(2, '0');
       type = vscode.window.createTextEditorDecorationType({
         // Whole-line anchoring puts the inset before inlay hints, so carets stay

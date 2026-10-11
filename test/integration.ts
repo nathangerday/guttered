@@ -46,6 +46,7 @@ export async function run(): Promise<void> {
   git(root, 'config', 'user.name', 'Guttered Tests');
   git(root, 'config', 'commit.gpgsign', 'false');
   await commitFile(root, 'deletions.txt', 'a\nX\nb\nY\nc\n');
+  await commitFile(root, 'highlight.cljc', '(ns demo.core)\n(def threshold 100)\n');
   for (const sample of unicodeCases) await commitFile(root, `${sample.name}.txt`, sample.baseline);
   await writeFile(path.join(root, 'latin1.properties'), Buffer.from(latin1Content, 'latin1'));
   git(root, 'add', 'latin1.properties');
@@ -241,27 +242,38 @@ export async function run(): Promise<void> {
   const previewVersion = document.version;
   await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(path.join(root, 'deletions.txt')));
   await vscode.commands.executeCommand('guttered.previewChange', ...actionArgs);
-  const previewActive = () => {
-    const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
-    return input instanceof vscode.TabInputWebview && input.viewType.includes('guttered.diffPanel');
-  };
-  await waitFor(previewActive, 'code hover action opens the custom preview even when another file has focus');
-  assert.ok(vscode.window.visibleTextEditors.some(view => view.document === document), 'the hover action opens its own source file');
-  assert.equal(document.getText(), beforePreview, 'opening the preview preserves unsaved content');
-  assert.equal(document.version, previewVersion, 'opening the preview does not edit the buffer');
-  const previewTabs = () => vscode.window.tabGroups.all.flatMap(group => group.tabs)
-    .filter(tab => tab.input instanceof vscode.TabInputWebview && tab.input.viewType.includes('guttered.diffPanel')).length;
-  assert.equal(previewTabs(), 1);
-  await vscode.commands.executeCommand('guttered.openDiff', document.uri.toString(), 5);
   await waitFor(() => vscode.window.tabGroups.activeTabGroup.activeTab?.input instanceof vscode.TabInputTextDiff,
-    'native diff can open from the preview');
-  await vscode.commands.executeCommand('guttered.previewChange', document.uri.toString(), 5);
-  await waitFor(previewActive, 'custom preview can reopen from the native diff');
-  assert.equal(previewTabs(), 1, 'the preview reuses its existing panel');
+    'changed-code hover opens the native diff even when another file has focus');
+  assert.equal(vscode.window.activeTextEditor?.document, document);
+  assert.equal(vscode.window.activeTextEditor?.selection.active.line, 7);
   assert.equal(document.getText(), beforePreview);
-  await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+  assert.equal(document.version, previewVersion);
+  await vscode.commands.executeCommand('guttered.copyChangePatch', document.uri.toString(), 7);
+  assert.match(await vscode.env.clipboard.readText(), /--- a\/file.txt\n\+\+\+ b\/file.txt/);
+  assert.match(await vscode.env.clipboard.readText(), /-unsaved-base\n\+unsaved-feature/);
+  await vscode.commands.executeCommand('guttered.openWorkingFile');
+  assert.ok(vscode.window.tabGroups.activeTabGroup.activeTab?.input instanceof vscode.TabInputText);
+  assert.equal(document.getText(), beforePreview);
+  console.log('PASS: native diff hover routing, selected line, copy patch, working-file action, and unchanged unsaved content');
+
+  const clojure = await vscode.workspace.openTextDocument(path.join(root, 'highlight.cljc'));
+  const clojureEditor = await vscode.window.showTextDocument(clojure);
+  await clojureEditor.edit(edit => edit.replace(clojure.lineAt(1).range, '(def threshold 60)'));
+  await vscode.commands.executeCommand('guttered.previewChange', clojure.uri.toString(), 1);
+  const clojureTab = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+  assert.ok(clojureTab instanceof vscode.TabInputTextDiff);
+  assert.equal(clojure.languageId, 'clojure');
+  assert.equal((await vscode.workspace.openTextDocument(clojureTab.original)).languageId, 'clojure');
+  assert.equal(clojureTab.original.path, clojure.uri.path, 'native originals preserve absolute paths for file associations');
+  await vscode.languages.setTextDocumentLanguage(clojure, 'plaintext');
+  await vscode.commands.executeCommand('guttered.openDiff', clojure.uri.toString(), 1);
+  assert.equal((await vscode.workspace.openTextDocument(clojureTab.original)).languageId, 'plaintext', 'manual language selection carries over to the original');
+  await vscode.languages.setTextDocumentLanguage(clojure, 'clojure');
+  await vscode.commands.executeCommand('guttered.openDiff', clojure.uri.toString(), 1);
+  assert.equal((await vscode.workspace.openTextDocument(clojureTab.original)).languageId, 'clojure');
+  assert.equal(clojure.isDirty, true);
   editor = await vscode.window.showTextDocument(document);
-  console.log('PASS: custom diff panel, source/native diff transitions, panel reuse, and unchanged unsaved buffers');
+  console.log('PASS: native Clojure language and manually selected language modes on both diff sides');
 
   const deletionDocument = await vscode.workspace.openTextDocument(path.join(root, 'deletions.txt'));
   const deletionEditor = await vscode.window.showTextDocument(deletionDocument);
