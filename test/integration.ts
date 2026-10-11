@@ -16,6 +16,12 @@ async function changeHover(document: vscode.TextDocument, line: number, characte
   return (hint && markerHovers.resolveInlayHint(hint)?.tooltip) as vscode.MarkdownString | undefined;
 }
 
+async function codeAction(document: vscode.TextDocument, line: number): Promise<vscode.MarkdownString | undefined> {
+  const hovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', document.uri, new vscode.Position(line, 0));
+  return hovers.flatMap(hover => hover.contents).find((content): content is vscode.MarkdownString =>
+    content instanceof vscode.MarkdownString && content.value.includes('command:guttered.previewChange?'));
+}
+
 const unicodeCases = [
   { name: 'emoji', baseline: 'status: 👍 ok\n', current: 'status: 👎 ok\n' },
   { name: 'unicode-suffix', baseline: 'a\uD83D\uDE00b\n', current: 'a\uD83C\uDE00b\n' },
@@ -119,13 +125,37 @@ export async function run(): Promise<void> {
   assert.deepEqual(unsavedHover.isTrusted, { enabledCommands: ['guttered.openDiff'] });
   assert.equal(await changeHover(document, 0), undefined);
   assert.equal(await changeHover(document, 7, 2), undefined);
+  const action = await codeAction(document, 7);
+  assert.ok(action);
+  assert.ok(action.value.includes('$(diff) Open change diff'));
+  assert.deepEqual(action.isTrusted, { enabledCommands: ['guttered.previewChange'] });
+  assert.equal(action.supportThemeIcons, true);
+  assert.equal(await codeAction(document, 0), undefined, 'unchanged lines have no diff action');
+  const actionLink = /command:guttered.previewChange\?([^)]*)/.exec(action.value)!;
+  const actionArgs = JSON.parse(decodeURIComponent(actionLink[1]!)) as [string, number];
+  assert.deepEqual(actionArgs, [document.uri.toString(), 7], 'the action names the hovered file and line');
   const languageHover = vscode.languages.registerHoverProvider({ scheme: 'file', language: 'plaintext' }, {
     provideHover: () => new vscode.Hover('Function documentation'),
   });
   try {
     const codeHovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', document.uri, new vscode.Position(7, 0));
-    assert.deepEqual(codeHovers.map(hover => hover.contents), [[new vscode.MarkdownString('Function documentation')]],
-      'code hover contains documentation without the branch-change preview');
+    const contents = codeHovers.flatMap(hover => hover.contents) as vscode.MarkdownString[];
+    assert.ok(contents.some(content => content.value === 'Function documentation'), 'language documentation remains in the code hover');
+    assert.equal(contents.find(content => content.value.includes('command:guttered.previewChange?'))?.value, action.value,
+      'the compact action appears alongside language documentation');
+    assert.equal(contents.length, 2, 'the code hover adds only the compact action');
+    const hoverSettings = vscode.workspace.getConfiguration('guttered', document.uri);
+    const previousAction = hoverSettings.inspect<boolean>('hoverAction')?.workspaceFolderValue;
+    try {
+      await hoverSettings.update('hoverAction', false, vscode.ConfigurationTarget.WorkspaceFolder);
+      const disabledHovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', document.uri, new vscode.Position(7, 0));
+      assert.deepEqual(disabledHovers.map(hover => hover.contents), [[new vscode.MarkdownString('Function documentation')]],
+        'disabling the action preserves language hovers');
+    } finally {
+      await hoverSettings.update('hoverAction', previousAction, vscode.ConfigurationTarget.WorkspaceFolder);
+    }
+    await waitFor(() => comparison()?.version === document.version, 'comparison resumes after changing the hover setting');
+    assert.equal((await codeAction(document, 7))?.value, action.value, 'the action resumes after reenabling its setting');
     assert.equal((await changeHover(document, 7))?.value, unsavedHover.value, 'marker preview stays separate from language hover providers');
     const hints = await vscode.commands.executeCommand<vscode.InlayHint[]>('vscode.executeInlayHintProvider', document.uri, new vscode.Range(7, 0, 7, 0));
     assert.equal(hints.length, 1, 'only the requested marked line has a hover target');
@@ -146,6 +176,8 @@ export async function run(): Promise<void> {
   const staleHint = markerHovers.provideInlayHints(document, new vscode.Range(7, 0, 7, 0))![0]!;
   await vscode.commands.executeCommand('guttered.restoreChange');
   assert.equal(markerHovers.resolveInlayHint(staleHint), undefined, 'an edit invalidates unresolved previews from an older document version');
+  await waitFor(() => comparison()?.version === document.version, 'comparison follows restoration');
+  assert.equal(await codeAction(document, 1), undefined, 'restoring a changed line removes its code action');
   assert.equal(document.lineAt(1).text, 'committed-base');
   assert.equal(document.lineAt(3).text, 'staged-feature');
   assert.equal(document.lineAt(7).text, 'unsaved-feature');
@@ -159,6 +191,7 @@ export async function run(): Promise<void> {
   assert.equal(controller.enabled, false);
   assert.equal(controller.getComparison(document.uri), undefined);
   assert.equal(await changeHover(document, 7), undefined);
+  assert.equal(await codeAction(document, 7), undefined, 'workspace toggle removes the code action');
   assert.equal(document.getText(), beforeToggle, 'toggle preserves unsaved edits');
   await vscode.commands.executeCommand('guttered.toggle');
   await waitFor(() => comparison()?.version === document.version, 'toggle restores live comparison');
@@ -204,6 +237,32 @@ export async function run(): Promise<void> {
   editor = await vscode.window.showTextDocument(document);
   console.log('PASS: gutter and editor context menus act on their own document and line');
 
+  const beforePreview = document.getText();
+  const previewVersion = document.version;
+  await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(path.join(root, 'deletions.txt')));
+  await vscode.commands.executeCommand('guttered.previewChange', ...actionArgs);
+  const previewActive = () => {
+    const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+    return input instanceof vscode.TabInputWebview && input.viewType.includes('guttered.diffPanel');
+  };
+  await waitFor(previewActive, 'code hover action opens the custom preview even when another file has focus');
+  assert.ok(vscode.window.visibleTextEditors.some(view => view.document === document), 'the hover action opens its own source file');
+  assert.equal(document.getText(), beforePreview, 'opening the preview preserves unsaved content');
+  assert.equal(document.version, previewVersion, 'opening the preview does not edit the buffer');
+  const previewTabs = () => vscode.window.tabGroups.all.flatMap(group => group.tabs)
+    .filter(tab => tab.input instanceof vscode.TabInputWebview && tab.input.viewType.includes('guttered.diffPanel')).length;
+  assert.equal(previewTabs(), 1);
+  await vscode.commands.executeCommand('guttered.openDiff', document.uri.toString(), 5);
+  await waitFor(() => vscode.window.tabGroups.activeTabGroup.activeTab?.input instanceof vscode.TabInputTextDiff,
+    'native diff can open from the preview');
+  await vscode.commands.executeCommand('guttered.previewChange', document.uri.toString(), 5);
+  await waitFor(previewActive, 'custom preview can reopen from the native diff');
+  assert.equal(previewTabs(), 1, 'the preview reuses its existing panel');
+  assert.equal(document.getText(), beforePreview);
+  await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+  editor = await vscode.window.showTextDocument(document);
+  console.log('PASS: custom diff panel, source/native diff transitions, panel reuse, and unchanged unsaved buffers');
+
   const deletionDocument = await vscode.workspace.openTextDocument(path.join(root, 'deletions.txt'));
   const deletionEditor = await vscode.window.showTextDocument(deletionDocument);
   const deletionRange = () => new vscode.Range(0, 0, deletionDocument.lineCount, 0);
@@ -212,6 +271,9 @@ export async function run(): Promise<void> {
   assert.ok((await changeHover(deletionDocument, 0))?.value.includes('-X'));
   assert.ok((await changeHover(deletionDocument, 1))?.value.includes('-Y'));
   assert.equal(await changeHover(deletionDocument, 2), undefined);
+  assert.ok(await codeAction(deletionDocument, 0), 'the code action includes deletion marker anchors');
+  assert.ok(await codeAction(deletionDocument, 1));
+  assert.equal(await codeAction(deletionDocument, 2), undefined, 'lines without a deletion marker stay clear');
   deletionEditor.selection = new vscode.Selection(1, 0, 1, 0);
   await vscode.commands.executeCommand('guttered.restoreChange');
   assert.equal(deletionDocument.getText(), 'a\nb\nY\nc\n');
@@ -343,6 +405,7 @@ export async function run(): Promise<void> {
   await config.update('gutterPlacement', 'glyphMargin', vscode.ConfigurationTarget.WorkspaceFolder);
   await waitFor(() => !!controller.getComparison(newDocument.uri), 'glyph-margin placement keeps comparing');
   assert.equal(await changeHover(newDocument, 0), undefined, 'glyph-margin markers have no hover target');
+  assert.ok(await codeAction(newDocument, 0), 'changed-code hovers work with glyph-margin markers');
   await config.update('gutterPlacement', undefined, vscode.ConfigurationTarget.WorkspaceFolder);
   await config.update('maxFileSizeKB', 1, vscode.ConfigurationTarget.WorkspaceFolder);
   await newEditor.edit(edit => edit.insert(new vscode.Position(0, 0), 'x'.repeat(2048)));
@@ -382,7 +445,9 @@ export async function run(): Promise<void> {
   remoteDefault(nested, 'release');
   git(nested, 'checkout', '-b', 'nested-feature');
   await commitFile(nested, 'nested.txt', 'feature\n');
-  await waitFor(() => controller.getComparison(nestedDoc.uri)?.snapshot.baseRef === 'origin/release', 'nested repository has independent default branch');
+  await waitFor(() => controller.getComparison(nestedDoc.uri)?.snapshot.baseRef === 'origin/release'
+    && controller.getComparison(nestedDoc.uri)?.diff.modified.length === 1,
+  'nested repository has independent default branch and its working file has reloaded');
   assert.equal(controller.getComparison(nestedDoc.uri)!.diff.modified.length, 1);
   console.log('PASS: nested repository discovery and simultaneous editors');
   await rm(path.join(root, '.vscode'), { recursive: true, force: true });

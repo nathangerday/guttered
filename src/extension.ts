@@ -3,8 +3,9 @@ import path from 'node:path';
 import { configuration } from './config';
 import { Controller, type Comparison, type GitAPI, type GitExtension } from './controller';
 import { hunkAtLine, hunkLine, lineMarkers, minimalTextChange, restoreHunk } from './diff';
-import { ChangeHover } from './hover';
+import { ChangeActionHover, ChangeHover } from './hover';
 import { ChangedFiles } from './changedFiles';
+import { DiffPanel } from './panel';
 
 const baselineScheme = 'guttered-base';
 
@@ -37,7 +38,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
   context.subscriptions.push(controller);
   const changedFiles = new ChangedFiles(controller);
   context.subscriptions.push(changedFiles);
+  const diffPanel = new DiffPanel(context, controller);
+  context.subscriptions.push(diffPanel);
   context.subscriptions.push(vscode.languages.registerInlayHintsProvider({ scheme: 'file' }, new ChangeHover(controller)));
+  context.subscriptions.push(vscode.languages.registerHoverProvider({ scheme: 'file' }, new ChangeActionHover(controller)));
   // The gutter context menu offers actions on marked lines. Right-clicking the
   // gutter doesn't focus its editor, so include lines from every visible editor.
   let markedLines: string | undefined;
@@ -153,6 +157,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
     const target = folder ? vscode.ConfigurationTarget.WorkspaceFolder : vscode.ConfigurationTarget.Global;
     await settings.update('baseReference', value.trim(), target);
   });
+  command('previewChange', async (...args) => {
+    const target = commandTarget(args);
+    const { editor: shown, document } = targetEditor(target);
+    if (!document || document.isClosed || document.uri.scheme !== 'file') return;
+    // Prefer an ordinary source editor when invoked from the native diff.
+    // Read-only previews may follow a fresh comparison even if its editor object changed.
+    const source = vscode.window.visibleTextEditors.find(editor => editor.document === document
+      && vscode.window.tabGroups.all.some(group => group.viewColumn === editor.viewColumn
+        && group.activeTab?.input instanceof vscode.TabInputText));
+    const editor = await vscode.window.showTextDocument(document, {
+      viewColumn: source?.viewColumn ?? shown?.viewColumn, preview: false,
+    });
+    const line = target?.line ?? editor.selection.active.line;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const comparison = await controller.compare(document, true);
+      if (document.isClosed) return;
+      if (comparison && comparison.version === document.version) return diffPanel.show(editor, comparison, line);
+      if (controller.reason(document.uri)) break;
+    }
+    void vscode.window.showInformationMessage(controller.reason(document.uri) ?? 'Guttered: the comparison changed. Please try again.');
+  });
   command('openDiff', async (...args) => {
     const target = commandTarget(args);
     return withComparison(target, async (editor, comparison) => {
@@ -203,6 +228,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Contro
     const actions = [
       { label: controller.enabled ? '$(circle-slash) Disable Guttered' : '$(check) Enable Guttered', command: 'toggle' },
       { label: '$(list-tree) Show Changed Files', command: 'showChangedFiles' },
+      { label: '$(diff) Preview Change with Merge Base', command: 'previewChange' },
       { label: '$(diff) Open Diff with Merge Base', command: 'openDiff' },
       { label: '$(arrow-down) Go to Next Change', command: 'nextChange' },
       { label: '$(arrow-up) Go to Previous Change', command: 'previousChange' },

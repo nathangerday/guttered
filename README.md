@@ -49,13 +49,15 @@ The glyph margin has trade-offs set by VS Code:
 
 - Clicking the glyph margin of a changed line doesn't add a breakpoint. Right-click the gutter and choose **Add Breakpoint**, or press F9. Clicking an existing breakpoint still removes it.
 - A breakpoint on a changed line needs a second glyph column, so the margin widens while it's set.
-- Marker previews are unavailable; use **Open Diff with Merge Base** from the gutter menu instead.
+- Glyphs have no hover preview. Hover the changed code and click **Open change diff**, or use **Preview Change with Merge Base** from the gutter menu. VS Code's public extension API exposes neither hover nor left-click events for decoration glyphs.
 - Another extension's gutter icon on the same changed line, such as a bookmark, shares the marker's slot, and VS Code shows only one of them.
 - Markers need **Editor: Glyph Margin**, which is on by default.
 
 To keep breakpoint clicks free and preview changes on hover, set **Guttered: Gutter Placement** (`guttered.gutterPlacement`) to `inset`. Markers then sit in an 8 px inset before the text, leaving breakpoint clicks, line numbers, folding controls, and native Git markers available. Unchanged lines use the same inset to keep the code aligned.
 
 The status bar shows the selected reference, such as `origin/trunk (merge-base)`. Hover for the current branch, merge-base SHA, and comparison state. Click it to open the actions menu.
+
+Hover over the code on a changed line to reveal a compact **Open change diff** link alongside any language documentation. One click opens the Guttered diff panel at that change, including unsaved edits. The action works with either marker placement and adds no permanent text or spacing. Disable it with **Guttered: Hover Action** (`guttered.hoverAction`).
 
 With the inset placement, hover over a branch-change marker to preview the removed and added lines. Click **Open Diff with Merge Base** in the hover to open VS Code's diff view at that change, including unsaved edits. Large previews are shortened; the diff view shows the full comparison.
 
@@ -77,6 +79,12 @@ The tree updates automatically while visible. It lists saved file changes throug
 
 A *hunk* is a group of adjacent changed lines. The available actions are:
 
+**Preview Change with Merge Base** opens a Guttered panel beside the file at the change you right-clicked. Switch between **Inline** and **Side by side**, navigate with the arrows or **Alt+Up/Down**, and inspect line and character highlights. **Revert change** restores the displayed hunk in the editor buffer without saving or staging; **Undo revert** reverses that edit while it is still the latest buffer change. The panel follows unsaved edits and merge-base changes. **Copy patch** copies the complete displayed hunk, **Open file** focuses its source line, and **Full diff** opens VS Code's native diff editor. Very large changes show a bounded excerpt; **Full diff** shows every line and **Revert change** restores the entire hunk.
+
+![The Guttered diff panel shows a syntax-highlighted change from the merge base, including an unsaved edit](assets/screenshots/change-preview.png)
+
+The panel highlights common languages using the file's language mode, including TypeScript/JavaScript, Python, HTML/CSS, JSON, YAML, SQL, C/C++, Java, Go, and Rust. Both sides retain multiline comment and string context. Syntax palettes adapt to dark, light, and high-contrast themes; custom editor token-color rules and semantic highlighting aren't copied into the webview. Unsupported languages and very large or slow-to-highlight files remain readable as plain text.
+
 - **Toggle On/Off** pauses or resumes Guttered for this workspace. The status bar menu labels the action **Disable Guttered** or **Enable Guttered**.
 - **Show Changed Files** opens the branch-changes tree in Source Control.
 - **Open Diff with Merge Base** compares the merge-base version with your current editor contents, including unsaved edits.
@@ -85,7 +93,7 @@ A *hunk* is a group of adjacent changed lines. The available actions are:
 - **Change Base Reference** lists local and remote-tracking branches from the file's repository. Type to filter them, or choose **Default branch (automatic)** at the top to return to the default branch. **Enter another Git reference…** accepts a tag, commit, or other reference. Every choice compares from its merge base with HEAD.
 - **Refresh Comparison** checks again and clears cached failures. Normal operation is automatic.
 
-All actions appear in the Command Palette and status bar menu. The **Guttered** editor context menu contains diff, navigation, and restore. Right-click the line number or glyph margin of a changed line for **Open Diff with Merge Base** and **Restore Change from Merge Base** at that line, below VS Code's breakpoint actions. You can assign shortcuts in VS Code's Keyboard Shortcuts editor; Guttered doesn't install default bindings.
+All actions appear in the Command Palette and status bar menu. The **Guttered** editor context menu contains preview, diff, navigation, and restore. Right-click the line number or glyph margin of a changed line for **Preview Change with Merge Base**, **Open Diff with Merge Base**, and **Restore Change from Merge Base** at that line, below VS Code's breakpoint actions. You can assign shortcuts in VS Code's Keyboard Shortcuts editor; Guttered doesn't install default bindings.
 
 Base-reference overrides apply to the current workspace folder, so repositories nested in that folder share the override. For a file outside every workspace folder, the command updates user settings and affects all workspaces. The picker states which scope it will change. It lists branches already available locally; it does not fetch.
 
@@ -110,6 +118,7 @@ All settings support workspace-folder overrides.
 | `guttered.debounceMs` | `250` | Delay after typing, in milliseconds |
 | `guttered.maxFileSizeKB` | `1024` | Maximum size of either file, in KiB |
 | `guttered.gutter` | `true` | Show markers beside the code |
+| `guttered.hoverAction` | `true` | Show a one-click diff-panel action when hovering over changed code |
 | `guttered.gutterPlacement` | `glyphMargin` | Place markers in the glyph margin, or in an `inset` before the text |
 | `guttered.overviewRuler` | `true` | Show overview ruler markers |
 | `guttered.opacity` | `0.3` | Marker opacity, from invisible (`0`) to fully opaque (`1`) |
@@ -150,7 +159,7 @@ npm run package               # Build the VSIX
 
 Desktop tests require a graphical session that can focus the test window. Headless Linux needs Xvfb and a window manager. Set `VSCODE_VERSION` to select a release, for example `VSCODE_VERSION=1.95.3 npm run test:integration`. The tests use temporary repositories and user data and remove them afterward. Prefix environment variables as shown in a POSIX shell; in PowerShell, set them with `$env:NAME = 'value'` before running the command.
 
-The source files follow the work the extension performs: `git.ts` handles Git and its caches, `diff.ts` computes changes and restoration edits, `decorations.ts` draws markers, `hover.ts` previews individual changes, `files.ts` combines saved and unsaved file changes and builds their folder tree, `changedFiles.ts` manages the sidebar, `controller.ts` coordinates updates, `extension.ts` registers commands, and `config.ts` reads settings. The baseline cache is limited to 16 MiB and 256 entries. `diff` is the only runtime dependency and is bundled in the VSIX.
+The source files follow the work the extension performs: `git.ts` handles Git and its caches, `diff.ts` computes changes and restoration edits, `decorations.ts` draws markers, `hover.ts` previews individual changes, `files.ts` combines saved and unsaved file changes and builds their folder tree, `changedFiles.ts` manages the sidebar, `controller.ts` coordinates updates, `extension.ts` registers commands, and `config.ts` reads settings. The baseline cache is limited to 16 MiB and 256 entries. Runtime dependencies are bundled in the VSIX: `diff` computes changes, and `lowlight` supplies the panel's syntax-token trees through Highlight.js. The build includes their third-party notices.
 
 Transparent PNGs are available at 1254×1254 (`assets/logo.png`), 256×256 (`assets/icon.png`), and 128×128 (`assets/icon-128.png`). The VSIX includes only `assets/icon.png`.
 

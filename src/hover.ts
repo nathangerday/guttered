@@ -3,6 +3,31 @@ import { configuration } from './config';
 import type { Comparison, Controller } from './controller';
 import { hunkLine, previewHunk } from './diff';
 
+/** A compact action in the normal code hover, alongside language documentation. */
+export class ChangeActionHover implements vscode.HoverProvider {
+  constructor(private readonly controller: Controller) {}
+
+  provideHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
+    const config = configuration(document.uri);
+    if (document.isClosed || !config.enabled || !config.hoverAction) return;
+    const comparison = this.controller.getComparison(document.uri);
+    if (!comparison || comparison.version !== document.version) return;
+    const marked = comparison.diff.hunks.some(hunk => {
+      const start = hunkLine(hunk, document.lineCount);
+      const end = hunk.newLines.length ? hunk.newStart + hunk.newLines.length - 1 : start;
+      return position.line >= start && position.line <= end;
+    });
+    if (!marked) return;
+
+    const message = new vscode.MarkdownString();
+    message.isTrusted = { enabledCommands: ['guttered.previewChange'] };
+    message.supportThemeIcons = true;
+    const args = encodeURIComponent(JSON.stringify([document.uri.toString(), position.line]));
+    message.appendMarkdown(`[$(diff) Open change diff](command:guttered.previewChange?${args})`);
+    return new vscode.Hover(message, document.lineAt(position.line).range);
+  }
+}
+
 function previewsEnabled(uri: vscode.Uri): boolean {
   const config = configuration(uri);
   // The hint sits on the inset marker; glyph-margin markers have no hover target.

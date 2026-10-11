@@ -13,7 +13,7 @@ test('hunk previews distinguish removed and added lines, including blank lines a
 });
 
 test('large hunk previews stay bounded and show both sides of a replacement', () => {
-  const hunk = computeDiff('old\n'.repeat(500), 'new\n'.repeat(500)).hunks[0]!;
+  const hunk = { oldStart: 0, newStart: 0, oldLines: Array<string>(500).fill('old\n'), newLines: Array<string>(500).fill('new\n') };
   const preview = previewHunk(hunk);
   assert.equal(preview.truncated, true);
   assert.equal(preview.text.split('\n').length, 25);

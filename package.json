@@ -3,7 +3,7 @@
   "displayName": "Guttered",
   "icon": "assets/icon.png",
   "description": "Live gutter indicators for your branch's changes since its merge base, including unsaved edits.",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "publisher": "nathangerday",
   "license": "MIT",
   "repository": {
@@ -84,6 +84,11 @@
         "icon": "$(git-branch)"
       },
       {
+        "command": "guttered.previewChange",
+        "title": "Guttered: Preview Change with Merge Base",
+        "icon": "$(diff)"
+      },
+      {
         "command": "guttered.openDiff",
         "title": "Guttered: Open Diff with Merge Base",
         "icon": "$(git-compare)"
@@ -142,14 +147,19 @@
       ],
       "editor/lineNumber/context": [
         {
-          "command": "guttered.openDiff",
+          "command": "guttered.previewChange",
           "when": "editorLineNumber in guttered.markedLines && resourceScheme == file",
           "group": "9_guttered@1"
         },
         {
-          "command": "guttered.restoreChange",
+          "command": "guttered.openDiff",
           "when": "editorLineNumber in guttered.markedLines && resourceScheme == file",
           "group": "9_guttered@2"
+        },
+        {
+          "command": "guttered.restoreChange",
+          "when": "editorLineNumber in guttered.markedLines && resourceScheme == file",
+          "group": "9_guttered@3"
         }
       ],
       "editor/context": [
@@ -161,8 +171,12 @@
       ],
       "guttered.context": [
         {
+          "command": "guttered.previewChange",
+          "group": "1_compare@1"
+        },
+        {
           "command": "guttered.openDiff",
-          "group": "1_compare"
+          "group": "1_compare@2"
         },
         {
           "command": "guttered.nextChange",
@@ -221,6 +235,12 @@
           "scope": "resource",
           "markdownDescription": "Show change markers beside the code, placed by `#guttered.gutterPlacement#`. Overview markers and actions remain available when disabled."
         },
+        "guttered.hoverAction": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Show a compact Open change diff action when hovering over changed code. Opens the Guttered diff panel with one click."
+        },
         "guttered.gutterPlacement": {
           "type": "string",
           "default": "glyphMargin",
@@ -229,7 +249,7 @@
             "inset"
           ],
           "enumDescriptions": [
-            "The glyph margin, beside breakpoints. Clicking a changed line there doesn't add a breakpoint; right-click the gutter or press F9 instead. Marker previews are unavailable.",
+            "The glyph margin, beside breakpoints. Clicking a changed line there doesn't add a breakpoint; right-click the gutter or press F9 instead. Hover the changed code to open the diff panel; glyphs have no hover preview.",
             "A small inset before the text. Breakpoint clicks and other gutter controls stay free, and hovering a marker previews the change."
           ],
           "scope": "resource",
@@ -274,9 +294,11 @@
     }
   },
   "dependencies": {
-    "diff": "^9.0.0"
+    "diff": "^9.0.0",
+    "lowlight": "^3.3.0"
   },
   "devDependencies": {
+    "@types/hast": "^3.0.5",
     "@types/node": "^22.0.0",
     "@types/vscode": "~1.95.0",
     "@vscode/test-electron": "^3.0.0",

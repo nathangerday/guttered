@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 
+- Add **Preview Change with Merge Base**, a theme-aware diff panel with inline and side-by-side layouts, change navigation, character highlights, copy patch, file/full-diff actions, and undoable revert. Open it from the changed-code hover, gutter menu, editor menu, Command Palette, or a user-assigned shortcut.
+- Add a compact **Open change diff** action to changed-code hovers, alongside existing language documentation and without permanent inline controls. One click opens the diff panel at that line. Disable it with `guttered.hoverAction`.
+- Add syntax highlighting to both diff-panel layouts, retaining character-change backgrounds and multiline source context. Colors adapt to dark, light, and high-contrast themes; tokenization runs locally in a bounded background worker.
 - Add an **Open File** action when hovering over added or modified files in **Guttered: Branch Changes**.
 
 ## 0.5.1
